@@ -1374,7 +1374,7 @@ sub checkspdx {
 
     my @bits = split / +/, $expr;
 
-    my $prefer = "GPL-2.0-or-later";
+    my $prefer = "MIT";
     my @valid = qw(
 	GPL-2.0-only
 	LGPL-2.1-only
