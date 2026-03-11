@@ -16,8 +16,12 @@ tasks in real time.
 ## Features
 
 - **LLM Chat Engine** — interactive conversation with Claude API over HTTP
-- **Tool Use** — LLM-driven hardware control (GPIO, system info) via
+- **Tool Use** — LLM-driven hardware control (GPIO, system info, LCD) via
   function calling
+- **LCD Graphics** — 320x240 RGB565 framebuffer with text, shapes, and
+  drawing primitives; AI agent can draw on screen via tool calls
+- **ESP-IDF Shell** — esp_console-based REPL with line editing, history,
+  and UTF-8 input support
 - **OSAL** — write once, run on FreeRTOS and RT-Thread with zero code changes
 - **Gateway** — thread-safe message routing between services
 - **Networking** — Ethernet + HTTP client on ESP32-C3 QEMU; WiFi on real
@@ -29,7 +33,7 @@ tasks in real time.
 ```
 +---------------------------------------------------+
 |                rt-claw Application                |
-|  gateway | swarm | net | ai_engine | tool_use    |
+|  gateway | swarm | net | ai_engine | tools | lcd |
 +---------------------------------------------------+
 |               claw_os.h  (OSAL API)               |
 +-----------------+---------------------------------+
@@ -57,7 +61,8 @@ source $HOME/esp/esp-idf/export.sh
 cd platform/esp32c3
 idf.py set-target esp32c3
 idf.py build
-idf.py qemu monitor         # QEMU
+idf.py qemu monitor                   # QEMU (serial only)
+idf.py qemu --graphics monitor        # QEMU with LCD display
 idf.py -p /dev/ttyUSB0 flash monitor  # real hardware
 ```
 
@@ -85,7 +90,7 @@ rt-claw/
 │   ├── services/ai/             #   LLM chat engine (Claude API)
 │   ├── services/net/            #   Network service
 │   ├── services/swarm/          #   Swarm intelligence
-│   └── tools/                   #   Tool Use framework (GPIO, system)
+│   └── tools/                   #   Tool Use framework (GPIO, system, LCD)
 ├── platform/
 │   ├── esp32c3/                 # ESP-IDF project (CMake)
 │   └── qemu-a9-rtthread/       # RT-Thread BSP (SCons)
@@ -96,7 +101,7 @@ rt-claw/
 │   ├── en/                      # English documentation
 │   └── zh/                      # Chinese documentation
 ├── scripts/                     # Code style & dev tools
-└── tools/                       # Build & launch scripts
+└── tools/                       # Build, launch & dev scripts
 ```
 
 ## Documentation
