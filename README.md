@@ -1,4 +1,4 @@
-# RT-Claw — Making Physical AI Cheap
+# RT-Claw — Making Physical AI Assistants Cheap
 
 [中文](README_zh.md) | **English**
 
