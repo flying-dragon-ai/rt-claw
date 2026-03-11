@@ -1,5 +1,7 @@
 # Contributing to rt-claw
 
+**English** | [中文](../zh/contributing.md)
+
 ## Quick Checklist
 
 Before submitting a patch, ensure:
@@ -66,7 +68,7 @@ Signed-off-by: Chao Liu <chao.liu.zevorn@gmail.com>
 
 ## Coding Style
 
-See [docs/coding-style.md](coding-style.md) for the full coding style guide.
+See [Coding Style](coding-style.md) for the full coding style guide.
 
 Key points:
 - 4 spaces, no tabs

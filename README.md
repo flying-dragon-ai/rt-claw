@@ -83,9 +83,10 @@ rt-claw/
 
 ## Documentation
 
-- [Coding Style](docs/coding-style.md)
-- [Contributing](docs/contributing.md)
-- [Architecture](docs/architecture.md)
+- [Coding Style](docs/en/coding-style.md)
+- [Contributing](docs/en/contributing.md)
+- [Architecture](docs/en/architecture.md)
+- [ESP32-C3 QEMU Guide](docs/en/esp32c3-qemu.md)
 
 ## License
 

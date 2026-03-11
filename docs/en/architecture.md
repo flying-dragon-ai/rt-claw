@@ -1,5 +1,7 @@
 # rt-claw Architecture
 
+**English** | [中文](../zh/architecture.md)
+
 ## Overview
 
 rt-claw brings the OpenClaw personal assistant concept to embedded RTOS devices.

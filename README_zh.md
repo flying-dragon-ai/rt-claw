@@ -81,9 +81,10 @@ rt-claw/
 
 ## 文档
 
-- [编码风格](docs/coding-style.md)
-- [贡献指南](docs/contributing.md)
-- [架构设计](docs/architecture.md)
+- [编码风格](docs/zh/coding-style.md)
+- [贡献指南](docs/zh/contributing.md)
+- [架构设计](docs/zh/architecture.md)
+- [ESP32-C3 QEMU 指南](docs/zh/esp32c3-qemu.md)
 
 ## 许可证
 

@@ -1,5 +1,7 @@
 # rt-claw Coding Style
 
+**English** | [中文](../zh/coding-style.md)
+
 This document defines the C coding style for the rt-claw project.
 It applies to all code under `src/` and `osal/` — the platform-independent
 core and the OS abstraction layer.

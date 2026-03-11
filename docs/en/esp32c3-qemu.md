@@ -1,5 +1,7 @@
 # ESP32-C3 QEMU Guide
 
+**English** | [中文](../zh/esp32c3-qemu.md)
+
 ## Overview
 
 Espressif maintains a QEMU fork ([espressif/qemu](https://github.com/espressif/qemu))
