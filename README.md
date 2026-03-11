@@ -1,8 +1,17 @@
 # rt-claw
 
+[中文](README_zh.md) | **English**
+
 Real-Time Claw — an OpenClaw-inspired intelligent assistant for embedded devices.
 
 Multi-RTOS support via OSAL. Build swarm intelligence with networked nodes.
+
+## Core Idea
+
+rt-claw brings intelligence from the cloud to the edge through low-cost
+embedded nodes and swarm networking.
+Each node can sense the world, collaborate with others, and execute control
+tasks in real time.
 
 ## Architecture
 
@@ -68,8 +77,15 @@ rt-claw/
 ├── vendor/
 │   ├── freertos/            # FreeRTOS-Kernel (submodule)
 │   └── rt-thread/           # RT-Thread (submodule)
+├── scripts/                 # Code style & dev tools
 └── tools/                   # Build & launch scripts
 ```
+
+## Documentation
+
+- [Coding Style](docs/coding-style.md)
+- [Contributing](docs/contributing.md)
+- [Architecture](docs/architecture.md)
 
 ## License
 
