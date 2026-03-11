@@ -226,15 +226,26 @@ void claw_free(void *ptr)
 void claw_log(int level, const char *tag, const char *fmt, ...)
 {
     va_list ap;
-    va_start(ap, fmt);
     esp_log_level_t esp_level;
+    static const char *letters[] = { "E", "W", "I", "D" };
+    int idx = level;
+    if (idx < 0) idx = 0;
+    if (idx > 3) idx = 3;
     switch (level) {
     case CLAW_LOG_ERROR: esp_level = ESP_LOG_ERROR; break;
     case CLAW_LOG_WARN:  esp_level = ESP_LOG_WARN;  break;
     case CLAW_LOG_INFO:  esp_level = ESP_LOG_INFO;  break;
     default:             esp_level = ESP_LOG_DEBUG;  break;
     }
-    esp_log_writev(esp_level, tag, fmt, ap);
+    /*
+     * esp_log_writev does NOT add prefix/newline — ESP_LOGx macros
+     * embed them in the format string. We do the same here.
+     */
+    char fmtbuf[256];
+    snprintf(fmtbuf, sizeof(fmtbuf), "%s (%lu) %s: %s\n",
+             letters[idx], (unsigned long)esp_log_timestamp(), tag, fmt);
+    va_start(ap, fmt);
+    esp_log_writev(esp_level, tag, fmtbuf, ap);
     va_end(ap);
 }
 
