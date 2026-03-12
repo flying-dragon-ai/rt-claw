@@ -1,8 +1,8 @@
-# One Dollar Hardware, One AI Lobster?
+# RT-Claw | Deploy Your Own AI Claw for Just One Dollar!
 
 An ESP32-C3 that costs less than a dollar. 160 MHz clock, 400 KB RAM — running AI on this?
 
-We did it. Meet RT-Claw (Real-Time Claw) — an AI lobster living on an embedded chip.
+We did it. Meet RT-Claw (Real-Time Claw) — an AI claw living on an embedded chip.
 
 ![RT-Claw](../../images/logo.png)
 
