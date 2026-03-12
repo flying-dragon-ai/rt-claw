@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RT-Claw — Making AI Assistants Cheap Again</title>
+    <meta name="description" content="RT-Claw: OpenClaw-inspired AI assistant on embedded RTOS. Multi-RTOS via OSAL. Build swarm intelligence with networked nodes.">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0a0e17;
+            --bg-card: #111827;
+            --bg-card-hover: #1a2332;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent2: #a78bfa;
+            --accent3: #34d399;
+            --border: #1e293b;
+            --radius: 12px;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        a { color: var(--accent); text-decoration: none; transition: opacity 0.2s; }
+        a:hover { opacity: 0.8; }
+
+        /* Nav */
+        nav {
+            position: fixed; top: 0; width: 100%; z-index: 100;
+            background: rgba(10, 14, 23, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 0 2rem;
+        }
+        .nav-inner {
+            max-width: 1200px; margin: 0 auto;
+            display: flex; align-items: center; justify-content: space-between;
+            height: 64px;
+        }
+        .nav-logo { font-size: 1.25rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 0.5rem; }
+        .nav-logo img { height: 32px; }
+        .nav-links { display: flex; gap: 2rem; list-style: none; }
+        .nav-links a { color: var(--text-muted); font-size: 0.9rem; font-weight: 500; }
+        .nav-links a:hover { color: var(--text); }
+
+        /* Hero */
+        .hero {
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            text-align: center; padding: 8rem 2rem 4rem;
+            background: radial-gradient(ellipse at 50% 0%, rgba(56,189,248,0.08) 0%, transparent 60%);
+        }
+        .hero-content { max-width: 800px; }
+        .hero-logo { width: min(400px, 80vw); margin-bottom: 1.5rem; }
+        .hero h1 { font-size: clamp(1.5rem, 4vw, 2.5rem); font-weight: 700; margin-bottom: 1rem; }
+        .hero h1 .gradient {
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .hero p { font-size: 1.15rem; color: var(--text-muted); max-width: 600px; margin: 0 auto 2.5rem; }
+        .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.75rem 1.75rem; border-radius: 8px; font-weight: 600; font-size: 0.95rem;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .btn:hover { transform: translateY(-1px); }
+        .btn-primary { background: var(--accent); color: #0a0e17; }
+        .btn-primary:hover { opacity: 1; box-shadow: 0 4px 20px rgba(56,189,248,0.3); }
+        .btn-outline { border: 1px solid var(--border); color: var(--text); }
+        .btn-outline:hover { border-color: var(--accent); opacity: 1; }
+
+        /* Section */
+        section { padding: 5rem 2rem; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .section-title {
+            text-align: center; font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; margin-bottom: 0.75rem;
+        }
+        .section-subtitle {
+            text-align: center; color: var(--text-muted); max-width: 600px; margin: 0 auto 3rem; font-size: 1.05rem;
+        }
+
+        /* Features grid */
+        .features-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+        .feature-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 2rem; transition: background 0.2s, border-color 0.2s;
+        }
+        .feature-card:hover { background: var(--bg-card-hover); border-color: var(--accent); }
+        .feature-icon { font-size: 2rem; margin-bottom: 1rem; }
+        .feature-card h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .feature-card p { color: var(--text-muted); font-size: 0.9rem; }
+
+        /* Architecture */
+        .arch-section { background: var(--bg-card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        .arch-diagram {
+            background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 2rem; overflow-x: auto;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: clamp(0.65rem, 1.5vw, 0.9rem); line-height: 1.6;
+            color: var(--accent); white-space: pre; text-align: center;
+        }
+
+        /* Demo */
+        .demo-img {
+            display: block; max-width: 700px; width: 100%; margin: 0 auto;
+            border-radius: var(--radius); border: 1px solid var(--border);
+        }
+
+        /* Platforms */
+        .platforms-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+        .platform-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 2rem; position: relative; overflow: hidden;
+        }
+        .platform-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+        }
+        .platform-card:first-child::before { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+        .platform-card:last-child::before { background: linear-gradient(90deg, var(--accent3), var(--accent)); }
+        .platform-card h3 { font-size: 1.2rem; margin-bottom: 0.5rem; }
+        .platform-card .tag {
+            display: inline-block; background: rgba(56,189,248,0.1); color: var(--accent);
+            padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; margin-right: 0.4rem; margin-bottom: 0.4rem;
+        }
+        .platform-card ul { list-style: none; margin-top: 1rem; }
+        .platform-card li { color: var(--text-muted); font-size: 0.9rem; padding: 0.25rem 0; }
+        .platform-card li::before { content: '›'; color: var(--accent); margin-right: 0.5rem; font-weight: 700; }
+
+        /* Status table */
+        .status-table { width: 100%; border-collapse: collapse; margin-top: 2rem; }
+        .status-table th, .status-table td {
+            padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.9rem;
+        }
+        .status-table th { color: var(--text-muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .status-table td { color: var(--text); }
+        .badge {
+            display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+        }
+        .badge-done { background: rgba(52,211,153,0.15); color: var(--accent3); }
+        .badge-wip { background: rgba(251,191,36,0.15); color: #fbbf24; }
+        .badge-planned { background: rgba(148,163,184,0.15); color: var(--text-muted); }
+
+        /* Community */
+        .community-links { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+        .community-link {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.75rem 1.5rem; border: 1px solid var(--border); border-radius: 8px;
+            color: var(--text); font-weight: 500; transition: border-color 0.2s, background 0.2s;
+        }
+        .community-link:hover { border-color: var(--accent); background: var(--bg-card); opacity: 1; }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--border); padding: 3rem 2rem; text-align: center;
+            color: var(--text-muted); font-size: 0.85rem;
+        }
+        footer p { margin-bottom: 0.5rem; }
+
+        /* Mobile nav toggle */
+        .nav-toggle { display: none; background: none; border: none; color: var(--text); font-size: 1.5rem; cursor: pointer; }
+        @media (max-width: 640px) {
+            .nav-links { display: none; }
+            .nav-toggle { display: block; }
+            .nav-links.open {
+                display: flex; flex-direction: column; position: absolute;
+                top: 64px; left: 0; right: 0; background: var(--bg); border-bottom: 1px solid var(--border);
+                padding: 1rem 2rem; gap: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+    <div class="nav-inner">
+        <a href="#" class="nav-logo">
+            <img src="img/logo.png" alt="RT-Claw">
+            RT-Claw
+        </a>
+        <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Menu">&#9776;</button>
+        <ul class="nav-links">
+            <li><a href="#features">Features</a></li>
+            <li><a href="#architecture">Architecture</a></li>
+            <li><a href="#demo">Demo</a></li>
+            <li><a href="#platforms">Platforms</a></li>
+            <li><a href="#community">Community</a></li>
+            <li><a href="https://github.com/zevorn/rt-claw" target="_blank">GitHub</a></li>
+        </ul>
+    </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+    <div class="hero-content">
+        <img src="img/logo.png" alt="RT-Claw" class="hero-logo">
+        <h1><span class="gradient">Making AI Assistants Cheap Again</span></h1>
+        <p>Deploy your own AI assistant on hardware that costs just one dollar — seamlessly integrated into your daily workflow, efficiently bridging the digital and physical worlds.</p>
+        <div class="hero-buttons">
+            <a href="https://github.com/zevorn/rt-claw" class="btn btn-primary" target="_blank">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/></svg>
+                Get Started
+            </a>
+            <a href="#features" class="btn btn-outline">Explore Features</a>
+        </div>
+    </div>
+</section>
+
+<!-- Features -->
+<section id="features">
+    <div class="container">
+        <h2 class="section-title">Core Features</h2>
+        <p class="section-subtitle">Intelligence from cloud to edge through low-cost embedded nodes and swarm networking.</p>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">&#129302;</div>
+                <h3>LLM Chat Engine</h3>
+                <p>Interactive conversation with Claude API over HTTP. Chat-first shell where direct input goes to AI, with /commands for system control.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#128295;</div>
+                <h3>Tool Use</h3>
+                <p>LLM-driven hardware control via function calling. GPIO, system info, LCD drawing — the AI agent orchestrates hardware capabilities dynamically.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#127912;</div>
+                <h3>LCD Graphics</h3>
+                <p>320x240 RGB565 framebuffer with text, shapes, and drawing primitives. AI agent can draw on screen via tool calls.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#128736;</div>
+                <h3>OSAL Abstraction</h3>
+                <p>Write once, run on FreeRTOS and RT-Thread with zero code changes. Clean claw_os.h interface hides all RTOS specifics.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#129703;</div>
+                <h3>Swarm Intelligence</h3>
+                <p>Node discovery, heartbeat, and distributed task scheduling. Networked nodes collaborate and execute tasks in real time.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#128268;</div>
+                <h3>Gateway Router</h3>
+                <p>Thread-safe message routing between services. Decoupled architecture enables modular, extensible service communication.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#129504;</div>
+                <h3>Conversation &amp; Skill Memory</h3>
+                <p>Short-term RAM ring buffer + long-term NVS Flash persistent storage. Nodes learn and recall frequently used operation patterns.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#9200;</div>
+                <h3>Scheduled Tasks</h3>
+                <p>Timer-driven task execution and periodic automation. Set up recurring operations that run autonomously on the device.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#128172;</div>
+                <h3>IM Integrations</h3>
+                <p>Connect to Feishu, DingTalk, QQ, and Telegram as message channels. Control your hardware from any chat platform.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Architecture -->
+<section id="architecture" class="arch-section">
+    <div class="container">
+        <h2 class="section-title">Architecture</h2>
+        <p class="section-subtitle">Clean layered design with OSAL bridging multiple RTOS platforms.</p>
+        <div class="arch-diagram">+---------------------------------------------------+
+|                rt-claw Application                |
+|  gateway | swarm | net | ai_engine | tools | lcd  |
++---------------------------------------------------+
+|               claw_os.h  (OSAL API)               |
++-----------------+---------------------------------+
+| FreeRTOS (IDF)  |          RT-Thread              |
++-----------------+---------------------------------+
+| ESP32-C3        |  QEMU vexpress-a9               |
+| WiFi / BLE      |  Ethernet / UART                |
++-----------------+---------------------------------+</div>
+    </div>
+</section>
+
+<!-- Demo -->
+<section id="demo">
+    <div class="container">
+        <h2 class="section-title">See It in Action</h2>
+        <p class="section-subtitle">AI drawing on LCD via Tool Use — the LLM controls hardware in real time.</p>
+        <img src="img/demo.png" alt="RT-Claw Demo — AI drawing on LCD via Tool Use" class="demo-img">
+    </div>
+</section>
+
+<!-- Platforms -->
+<section id="platforms">
+    <div class="container">
+        <h2 class="section-title">Supported Platforms</h2>
+        <p class="section-subtitle">Run on real hardware or emulate with QEMU — your choice.</p>
+        <div class="platforms-grid">
+            <div class="platform-card">
+                <h3>ESP32-C3</h3>
+                <div>
+                    <span class="tag">RISC-V</span>
+                    <span class="tag">FreeRTOS</span>
+                    <span class="tag">ESP-IDF</span>
+                    <span class="tag">WiFi</span>
+                    <span class="tag">BLE</span>
+                </div>
+                <ul>
+                    <li>160 MHz single-core, 400 KB SRAM</li>
+                    <li>CMake build system via idf.py</li>
+                    <li>Networking + AI working on QEMU</li>
+                    <li>Flash to real hardware or emulate</li>
+                </ul>
+            </div>
+            <div class="platform-card">
+                <h3>QEMU vexpress-a9</h3>
+                <div>
+                    <span class="tag">ARM Cortex-A9</span>
+                    <span class="tag">RT-Thread</span>
+                    <span class="tag">SCons</span>
+                    <span class="tag">Ethernet</span>
+                </div>
+                <ul>
+                    <li>RT-Thread v5.3.0 BSP</li>
+                    <li>SCons build system</li>
+                    <li>Boot verified on QEMU</li>
+                    <li>Great for development and testing</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Status Table -->
+        <h2 class="section-title" style="margin-top: 4rem;">Feature Status</h2>
+        <div style="overflow-x: auto;">
+            <table class="status-table">
+                <thead>
+                    <tr><th>Feature</th><th>Description</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>LLM Chat Engine</td><td>Interactive conversation with Claude API over HTTP</td><td><span class="badge badge-done">Done</span></td></tr>
+                    <tr><td>Tool Use</td><td>LLM-driven hardware control via function calling</td><td><span class="badge badge-done">Done</span></td></tr>
+                    <tr><td>LCD Graphics</td><td>320x240 RGB565 framebuffer with AI drawing</td><td><span class="badge badge-done">Done</span></td></tr>
+                    <tr><td>Chat-first Shell</td><td>UART REPL with AI integration and UTF-8 support</td><td><span class="badge badge-done">Done</span></td></tr>
+                    <tr><td>OSAL</td><td>Write once, run on FreeRTOS and RT-Thread</td><td><span class="badge badge-done">Done</span></td></tr>
+                    <tr><td>Gateway</td><td>Thread-safe message routing between services</td><td><span class="badge badge-done">Done</span></td></tr>
+                    <tr><td>Networking</td><td>Ethernet + HTTP on ESP32-C3 QEMU; WiFi on real HW</td><td><span class="badge badge-done">Done</span></td></tr>
+                    <tr><td>Conversation Memory</td><td>RAM ring buffer + NVS Flash persistent storage</td><td><span class="badge badge-done">Done</span></td></tr>
+                    <tr><td>Scheduled Tasks</td><td>Timer-driven task execution and periodic automation</td><td><span class="badge badge-done">Done</span></td></tr>
+                    <tr><td>Swarm Intelligence</td><td>Node discovery, heartbeat, distributed scheduling</td><td><span class="badge badge-wip">In Progress</span></td></tr>
+                    <tr><td>Skill Memory</td><td>Learn and recall frequently used operation patterns</td><td><span class="badge badge-wip">In Progress</span></td></tr>
+                    <tr><td>IM Integrations</td><td>Feishu, DingTalk, QQ, Telegram as message channels</td><td><span class="badge badge-wip">In Progress</span></td></tr>
+                    <tr><td>Multi-Model API</td><td>Claude, GPT, Gemini, DeepSeek, and more</td><td><span class="badge badge-planned">Planned</span></td></tr>
+                    <tr><td>Web Config Portal</td><td>Built-in web page for runtime configuration</td><td><span class="badge badge-planned">Planned</span></td></tr>
+                    <tr><td>Claw Skill Provider</td><td>Serve as a skill for other Claws</td><td><span class="badge badge-planned">Planned</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- Community -->
+<section id="community">
+    <div class="container">
+        <h2 class="section-title">Join the Community</h2>
+        <p class="section-subtitle">GTOC (Gevico Open-Source Community) — build the future of embedded AI together.</p>
+        <div class="community-links">
+            <a href="https://github.com/zevorn/rt-claw" class="community-link" target="_blank">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/></svg>
+                GitHub
+            </a>
+            <a href="https://qm.qq.com/q/heSPPC9De8" class="community-link" target="_blank">
+                QQ Group
+            </a>
+            <a href="https://t.me/gevico_channel" class="community-link" target="_blank">
+                Telegram
+            </a>
+            <a href="https://space.bilibili.com/483048140" class="community-link" target="_blank">
+                Bilibili
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer>
+    <div class="container">
+        <p><strong>RT-Claw</strong> — OpenClaw-inspired AI Assistant on Embedded RTOS</p>
+        <p>Released under the <a href="https://github.com/zevorn/rt-claw/blob/main/LICENSE">MIT License</a></p>
+    </div>
+</footer>
+
+</body>
+</html>
