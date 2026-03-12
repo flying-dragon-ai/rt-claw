@@ -9,19 +9,28 @@
 #include "claw_os.h"
 #include "claw_init.h"
 #include "ai_engine.h"
-#include "ai_memory.h"
-#include "ai_skill.h"
-#include "scheduler.h"
-#include "swarm.h"
 
 #include <stdio.h>
 #include <string.h>
 
 #ifdef CLAW_PLATFORM_ESP_IDF
-#include "driver/uart.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
 #endif
+
+#ifdef CONFIG_CLAW_SHELL_ENABLE
+#include "ai_memory.h"
+#include "driver/uart.h"
+#ifdef CONFIG_CLAW_SKILL_ENABLE
+#include "ai_skill.h"
+#endif
+#ifdef CONFIG_CLAW_SCHED_ENABLE
+#include "scheduler.h"
+#endif
+#ifdef CONFIG_CLAW_SWARM_ENABLE
+#include "swarm.h"
+#endif
+#endif /* CONFIG_CLAW_SHELL_ENABLE */
 
 #define TAG         "main"
 #define REPLY_SIZE  4096
@@ -36,7 +45,7 @@
 #define CLR_CYAN    "\033[0;36m"
 #define CLR_MAGENTA "\033[0;35m"
 
-#ifdef CLAW_PLATFORM_ESP_IDF
+#ifdef CONFIG_CLAW_SHELL_ENABLE
 
 static char *s_reply;
 
@@ -115,9 +124,15 @@ static void cmd_help(void)
     printf("  /log [on|off]            Toggle log output\n");
     printf("  /history                 Show conversation message count\n");
     printf("  /clear                   Clear conversation memory\n");
+#ifdef CONFIG_CLAW_SKILL_ENABLE
     printf("  /skill [name] [args]     List or execute a skill\n");
+#endif
+#ifdef CONFIG_CLAW_SCHED_ENABLE
     printf("  /sched                   List scheduled tasks\n");
+#endif
+#ifdef CONFIG_CLAW_SWARM_ENABLE
     printf("  /nodes                   Show swarm node table\n");
+#endif
     printf("  /remember <key> <val>    Save to long-term memory\n");
     printf("  /forget <key>            Delete from long-term memory\n");
     printf("  /memories                List long-term memories\n");
@@ -135,11 +150,14 @@ static void cmd_clear(void)
     printf("Conversation memory cleared.\n");
 }
 
+#ifdef CONFIG_CLAW_SCHED_ENABLE
 static void cmd_sched(void)
 {
     sched_list();
 }
+#endif
 
+#ifdef CONFIG_CLAW_SKILL_ENABLE
 static void cmd_skill(int argc, char **argv)
 {
     if (argc < 2) {
@@ -163,6 +181,7 @@ static void cmd_skill(int argc, char **argv)
         printf("\n" CLR_RED "<error> " CLR_RESET "%s\n", s_reply);
     }
 }
+#endif
 
 static void cmd_remember(int argc, char **argv)
 {
@@ -223,10 +242,12 @@ static void cmd_log(int argc, char **argv)
     printf("Log output: %s\n", claw_log_get_enabled() ? "ON" : "OFF");
 }
 
+#ifdef CONFIG_CLAW_SWARM_ENABLE
 static void cmd_nodes(void)
 {
     swarm_list_nodes();
 }
+#endif
 
 /* Dispatch a /command */
 static void dispatch_command(char *line)
@@ -248,18 +269,24 @@ static void dispatch_command(char *line)
         cmd_history();
     } else if (strcmp(cmd, "/clear") == 0) {
         cmd_clear();
+#ifdef CONFIG_CLAW_SCHED_ENABLE
     } else if (strcmp(cmd, "/sched") == 0) {
         cmd_sched();
+#endif
+#ifdef CONFIG_CLAW_SKILL_ENABLE
     } else if (strcmp(cmd, "/skill") == 0) {
         cmd_skill(argc, argv);
+#endif
     } else if (strcmp(cmd, "/remember") == 0) {
         cmd_remember(argc, argv);
     } else if (strcmp(cmd, "/forget") == 0) {
         cmd_forget(argc, argv);
     } else if (strcmp(cmd, "/memories") == 0) {
         cmd_memories();
+#ifdef CONFIG_CLAW_SWARM_ENABLE
     } else if (strcmp(cmd, "/nodes") == 0) {
         cmd_nodes();
+#endif
     } else {
         printf("Unknown command: %s (type /help)\n", cmd);
     }
@@ -373,7 +400,7 @@ static void shell_loop(void)
     }
 }
 
-#endif /* CLAW_PLATFORM_ESP_IDF */
+#endif /* CONFIG_CLAW_SHELL_ENABLE */
 
 void app_main(void)
 {
@@ -385,16 +412,14 @@ void app_main(void)
         nvs_flash_erase();
         nvs_flash_init();
     }
-#endif
 
-#ifdef CLAW_PLATFORM_ESP_IDF
     /* Suppress log output by default; use /log on to enable */
     esp_log_level_set("*", ESP_LOG_NONE);
 #endif
 
     claw_init();
 
-#ifdef CLAW_PLATFORM_ESP_IDF
+#ifdef CONFIG_CLAW_SHELL_ENABLE
     shell_loop();
 #endif
 

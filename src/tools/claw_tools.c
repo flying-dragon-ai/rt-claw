@@ -17,10 +17,18 @@ void claw_tools_init(void)
     memset(s_tools, 0, sizeof(s_tools));
     s_tool_count = 0;
 
+#ifdef CONFIG_CLAW_TOOL_GPIO
     claw_tools_register_gpio();
+#endif
+#ifdef CONFIG_CLAW_TOOL_SYSTEM
     claw_tools_register_system();
+#endif
+#ifdef CONFIG_CLAW_TOOL_LCD
     claw_tools_register_lcd();
+#endif
+#ifdef CONFIG_CLAW_TOOL_SCHED
     claw_tools_register_sched();
+#endif
 
     CLAW_LOGI(TAG, "%d tools registered", s_tool_count);
 }

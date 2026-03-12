@@ -98,6 +98,11 @@ void claw_tools_register_sched(void);
 int claw_lcd_init(void);
 
 /**
+ * Check whether LCD hardware was initialized successfully.
+ */
+int claw_lcd_available(void);
+
+/**
  * Show status message on LCD bottom area.
  */
 void claw_lcd_status(const char *msg);

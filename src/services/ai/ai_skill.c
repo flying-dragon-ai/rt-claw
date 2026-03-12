@@ -26,14 +26,18 @@ static int        s_count;
 
 static void register_builtins(void)
 {
+#ifdef CONFIG_CLAW_TOOL_LCD
     ai_skill_register("draw",
         "Draw on LCD display",
         "Draw the following on the LCD display using lcd_* tools: %s");
+#endif
 
+#ifdef CONFIG_CLAW_TOOL_SYSTEM
     ai_skill_register("monitor",
         "Check system health",
         "Check system health via system_info and memory_info tools, "
         "provide brief summary. %s");
+#endif
 
     ai_skill_register("greet",
         "Greet the user",

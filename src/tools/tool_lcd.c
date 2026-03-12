@@ -555,10 +555,22 @@ static const char schema_lcd_circle[] =
     "\"filled\":{\"type\":\"boolean\",\"description\":\"true=filled, false=outline\"}},"
     "\"required\":[\"x\",\"y\",\"radius\"]}";
 
+/* -------------------- Hardware detection -------------------- */
+
+int claw_lcd_available(void)
+{
+    return (s_fb != NULL) ? 1 : 0;
+}
+
 /* -------------------- Registration -------------------- */
 
 void claw_tools_register_lcd(void)
 {
+    if (!claw_lcd_available()) {
+        CLAW_LOGW(TAG, "LCD not available, skipping tool registration");
+        return;
+    }
+
     claw_tool_register("lcd_fill",
         "Fill the entire LCD screen (320x240) with a solid color.",
         schema_lcd_fill, tool_lcd_fill);
@@ -639,6 +651,11 @@ void claw_lcd_progress(int percent)
 int claw_lcd_init(void)
 {
     return CLAW_ERROR;
+}
+
+int claw_lcd_available(void)
+{
+    return 0;
 }
 
 void claw_tools_register_lcd(void)
