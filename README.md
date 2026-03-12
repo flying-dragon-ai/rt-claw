@@ -33,6 +33,10 @@ embedded nodes and swarm networking.
 Each node can sense the world, collaborate with others, and execute control
 tasks in real time.
 
+RT-Claw exposes atomized hardware capabilities — GPIO, sensors, LCD,
+networking — as tools that an LLM can dynamically orchestrate. Adapt to any
+scenario without writing, compiling, or flashing embedded code again.
+
 ## Features
 
 | Feature | Description | Status |
