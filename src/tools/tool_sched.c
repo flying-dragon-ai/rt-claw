@@ -3,6 +3,10 @@
  * SPDX-License-Identifier: MIT
  *
  * Scheduler tools — let AI add/remove timed tasks via Tool Use.
+ *
+ * A dedicated worker thread executes AI calls asynchronously so
+ * the scheduler callback returns immediately and never blocks
+ * the scheduler or the interactive shell.
  */
 
 #include "claw_os.h"
@@ -21,6 +25,8 @@
 #define SCHED_AI_MAX     4
 #define SCHED_PROMPT_MAX 256
 #define SCHED_REPLY_MAX  1024
+#define WORKER_STACK     16384
+#define WORKER_PRIO      11
 
 typedef struct {
     char prompt[SCHED_PROMPT_MAX];
@@ -29,6 +35,12 @@ typedef struct {
 } sched_ai_ctx_t;
 
 static sched_ai_ctx_t s_ctx[SCHED_AI_MAX];
+
+/* Worker thread state */
+static claw_sem_t   s_worker_sem;
+static claw_mutex_t s_worker_lock;
+static sched_ai_ctx_t *s_pending_ctx;
+static int s_worker_busy; /* protected by s_worker_lock */
 
 static sched_ai_ctx_t *ctx_alloc(void)
 {
@@ -52,15 +64,57 @@ static void ctx_free_by_prompt(const char *prompt)
     }
 }
 
+/* Worker thread — runs AI calls with sufficient stack */
+static void ai_worker_thread(void *arg)
+{
+    (void)arg;
+
+    while (1) {
+        claw_sem_take(s_worker_sem, CLAW_WAIT_FOREVER);
+
+        claw_mutex_lock(s_worker_lock, CLAW_WAIT_FOREVER);
+        sched_ai_ctx_t *ctx = s_pending_ctx;
+        s_pending_ctx = NULL;
+        s_worker_busy = 1;
+        claw_mutex_unlock(s_worker_lock);
+
+        if (!ctx) {
+            s_worker_busy = 0;
+            continue;
+        }
+
+        if (ai_chat_raw(ctx->prompt, ctx->reply,
+                        SCHED_REPLY_MAX) == CLAW_OK) {
+            printf("\n\033[0;33m<sched>\033[0m %s\n",
+                   ctx->reply);
+            fflush(stdout);
+        }
+
+        claw_mutex_lock(s_worker_lock, CLAW_WAIT_FOREVER);
+        s_worker_busy = 0;
+        claw_mutex_unlock(s_worker_lock);
+    }
+}
+
+/*
+ * Scheduler callback — just posts work to the worker thread.
+ * Returns immediately so the scheduler is never blocked.
+ */
 static void sched_ai_callback(void *arg)
 {
     sched_ai_ctx_t *ctx = (sched_ai_ctx_t *)arg;
 
-    if (ai_chat_raw(ctx->prompt, ctx->reply,
-                    SCHED_REPLY_MAX) == CLAW_OK) {
-        printf("\n\033[0;33m<sched>\033[0m %s\n", ctx->reply);
-        fflush(stdout);
+    claw_mutex_lock(s_worker_lock, CLAW_WAIT_FOREVER);
+    if (s_worker_busy) {
+        /* Worker still processing previous call, skip */
+        claw_mutex_unlock(s_worker_lock);
+        CLAW_LOGD(TAG, "worker busy, skipping tick");
+        return;
     }
+    s_pending_ctx = ctx;
+    claw_mutex_unlock(s_worker_lock);
+
+    claw_sem_give(s_worker_sem);
 }
 
 static int tool_schedule_task(const cJSON *params, cJSON *result)
@@ -169,6 +223,14 @@ static const char schema_remove[] =
 void claw_tools_register_sched(void)
 {
     memset(s_ctx, 0, sizeof(s_ctx));
+    s_worker_busy = 0;
+    s_pending_ctx = NULL;
+
+    s_worker_sem = claw_sem_create("sched_w", 0);
+    s_worker_lock = claw_mutex_create("sched_w");
+
+    claw_thread_create("sched_ai", ai_worker_thread, NULL,
+                       WORKER_STACK, WORKER_PRIO);
 
     claw_tool_register("schedule_task",
         "Schedule a recurring AI task. The prompt will be executed "
