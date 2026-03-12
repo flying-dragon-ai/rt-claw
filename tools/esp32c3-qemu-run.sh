@@ -34,10 +34,10 @@ FLASH_SIZE="4MB"
 FLASH_IMAGE="build/flash_image.bin"
 
 echo ">>> Generating merged flash image ..."
-esptool.py --chip esp32c3 merge_bin \
+(cd build && esptool.py --chip esp32c3 merge_bin \
     --fill-flash-size "$FLASH_SIZE" \
-    -o "$FLASH_IMAGE" \
-    @build/flash_args
+    -o flash_image.bin \
+    @flash_args)
 
 DISPLAY_FLAG="-nographic"
 if [ "$1" = "--graphics" ]; then
