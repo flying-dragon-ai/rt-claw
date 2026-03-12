@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="RT-Claw" width="500">
+  <img src="images/logo.png" alt="RT-Claw" width="500">
 </p>
 
 <p align="center">
@@ -19,6 +19,10 @@
 通过 OSAL 支持多 RTOS，以组网节点构建蜂群智能。
 
 > 仅需一美元的硬件成本，即可快速部署你的专属 AI 助理——无缝融入工作与生活，高效连接物理世界。
+
+<p align="center">
+  <img src="images/demo.png" alt="RT-Claw 演示 — AI 通过 Tool Use 在 LCD 上绘图" width="700">
+</p>
 
 [架构设计](docs/zh/architecture.md) · [ESP32-C3 QEMU 指南](docs/zh/esp32c3-qemu.md) · [贡献指南](docs/zh/contributing.md) · [编码风格](docs/zh/coding-style.md)
 

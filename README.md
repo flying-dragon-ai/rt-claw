@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="RT-Claw" width="500">
+  <img src="images/logo.png" alt="RT-Claw" width="500">
 </p>
 
 <p align="center">
@@ -19,6 +19,10 @@
 Multi-RTOS support via OSAL. Build swarm intelligence with networked nodes.
 
 > Deploy your own AI assistant on hardware that costs just one dollar — seamlessly integrated into your daily workflow, efficiently bridging the digital and physical worlds.
+
+<p align="center">
+  <img src="images/demo.png" alt="RT-Claw Demo — AI drawing on LCD via Tool Use" width="700">
+</p>
 
 [Architecture](docs/en/architecture.md) · [ESP32-C3 QEMU Guide](docs/en/esp32c3-qemu.md) · [Contributing](docs/en/contributing.md) · [Coding Style](docs/en/coding-style.md)
 
