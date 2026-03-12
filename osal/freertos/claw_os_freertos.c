@@ -37,6 +37,20 @@ static inline TickType_t ms_to_ticks(uint32_t ms)
 
 /* ---------- Thread ---------- */
 
+typedef struct {
+    void (*entry)(void *arg);
+    void *arg;
+} thread_wrap_t;
+
+static void thread_wrapper(void *param)
+{
+    thread_wrap_t w = *(thread_wrap_t *)param;
+    vPortFree(param);
+    w.entry(w.arg);
+    /* Auto-delete when thread function returns */
+    vTaskDelete(NULL);
+}
+
 claw_thread_t claw_thread_create(const char *name,
                                   void (*entry)(void *arg),
                                   void *arg,
@@ -44,12 +58,20 @@ claw_thread_t claw_thread_create(const char *name,
                                   uint32_t priority)
 {
     TaskHandle_t handle = NULL;
-    BaseType_t ret;
-
-    ret = xTaskCreate(entry, name, stack_size / sizeof(StackType_t),
-                      arg, priority, &handle);
-    if (ret != pdPASS)
+    thread_wrap_t *w = pvPortMalloc(sizeof(*w));
+    if (!w) {
         return NULL;
+    }
+    w->entry = entry;
+    w->arg = arg;
+
+    BaseType_t ret = xTaskCreate(thread_wrapper, name,
+                                 stack_size / sizeof(StackType_t),
+                                 w, priority, &handle);
+    if (ret != pdPASS) {
+        vPortFree(w);
+        return NULL;
+    }
     return (claw_thread_t)handle;
 }
 
