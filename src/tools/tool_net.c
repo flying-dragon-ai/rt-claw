@@ -420,15 +420,16 @@ void claw_tools_register_net(void)
 #ifdef CLAW_PLATFORM_ESP_IDF
     static const char desc[] =
         "Make an HTTP or HTTPS request (GET or POST). Returns status code "
-        "and response body (truncated to 16KB). Use this to fetch web pages, "
-        "call REST APIs, or check network connectivity. "
-        "Both HTTP and HTTPS URLs are fully supported.";
+        "and response body. IMPORTANT: responses larger than 16KB are "
+        "truncated (truncated=true in result). Prefer compact formats "
+        "(e.g. wttr.in?format=3) over verbose JSON APIs to avoid "
+        "truncation. Both HTTP and HTTPS URLs are supported.";
 #else
     static const char desc[] =
         "Make an HTTP request (GET or POST). Returns status code and "
-        "response body (truncated to 16KB). Use this to fetch web pages, "
-        "call REST APIs, or check network connectivity. "
-        "Only plain HTTP is supported (no HTTPS).";
+        "response body. IMPORTANT: responses larger than 16KB are "
+        "truncated (truncated=true in result). Prefer compact formats "
+        "to avoid truncation. Only plain HTTP is supported (no HTTPS).";
 #endif
 
     claw_tool_register("http_request", desc,
