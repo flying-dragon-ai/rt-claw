@@ -673,26 +673,16 @@ int ai_chat(const char *user_msg, char *reply, size_t reply_size)
     cJSON *messages = ai_memory_build_messages();
     cJSON *tools = claw_tools_to_json();
 
-    int orig_msg_count = cJSON_GetArraySize(messages);
-
     int ret = ai_chat_with_messages(sys_prompt, messages, tools,
                                      reply, reply_size);
 
-    int msg_count = cJSON_GetArraySize(messages);
-    for (int i = orig_msg_count; i < msg_count; i++) {
-        cJSON *msg = cJSON_GetArrayItem(messages, i);
-        cJSON *role = cJSON_GetObjectItem(msg, "role");
-        cJSON *content = cJSON_GetObjectItem(msg, "content");
-        if (!role || !content) {
-            continue;
-        }
-        char *content_str = cJSON_PrintUnformatted(content);
-        if (content_str) {
-            ai_memory_add_message(role->valuestring, content_str);
-            cJSON_free(content_str);
-        }
-    }
-
+    /*
+     * Only store the final assistant text reply into memory.
+     * Intermediate tool_use / tool_result messages are NOT saved
+     * because drop_oldest_pair() drops 2 at a time and can orphan
+     * a tool_result without its matching tool_use, causing
+     * "unexpected tool_use_id" errors on the next API call.
+     */
     if (ret == CLAW_OK && reply[0] != '\0') {
         ai_memory_add_message("assistant", reply);
     }
