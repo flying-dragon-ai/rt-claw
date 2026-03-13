@@ -160,7 +160,7 @@ on boot — no public IP required.
 make esp32c3
 
 # Run on QEMU
-./tools/qemu-run.sh -m esp32c3
+./tools/qemu-run.sh -M esp32c3
 
 # Or flash to real hardware (untested)
 idf.py -p /dev/ttyUSB0 flash monitor
@@ -183,7 +183,7 @@ cd platform/qemu-a9-rtthread && scons -j$(nproc)
 python3 tools/api-proxy.py https://api.anthropic.com &
 
 # Run
-./tools/qemu-run.sh -m qemu-a9
+./tools/qemu-run.sh -M qemu-a9
 ```
 
 ## Project Structure
@@ -218,7 +218,7 @@ rt-claw/
 │   ├── gen-esp32c3-cross.py     # Auto-generate Meson cross-file from ESP-IDF
 │   └── ...
 └── tools/
-    ├── qemu-run.sh              # Unified QEMU launcher (-m qemu-a9 / -m esp32c3)
+    ├── qemu-run.sh              # Unified QEMU launcher (-M qemu-a9 / -M esp32c3)
     ├── api-proxy.py             # HTTP→HTTPS proxy for QEMU (no TLS on RT-Thread)
     └── ...
 ```

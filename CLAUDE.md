@@ -28,14 +28,14 @@ meson compile -C build/esp32c3
 ```bash
 # QEMU vexpress-a9 (RT-Thread)
 make run-qemu-a9                       # build + launch QEMU
-tools/qemu-run.sh -m qemu-a9           # launch only (must build first)
-tools/qemu-run.sh -m qemu-a9 -g        # debug mode (GDB port 1234)
+tools/qemu-run.sh -M qemu-a9           # launch only (must build first)
+tools/qemu-run.sh -M qemu-a9 -g        # debug mode (GDB port 1234)
 
 # ESP32-C3 QEMU (requires ESP-IDF)
 make run-esp32c3                       # build + launch QEMU
-tools/qemu-run.sh -m esp32c3           # launch only
-tools/qemu-run.sh -m esp32c3 --graphics  # with LCD display window
-tools/qemu-run.sh -m esp32c3 -g        # debug mode (GDB port 1234)
+tools/qemu-run.sh -M esp32c3           # launch only
+tools/qemu-run.sh -M esp32c3 --graphics  # with LCD display window
+tools/qemu-run.sh -M esp32c3 -g        # debug mode (GDB port 1234)
 
 # Shell completion
 eval "$(tools/qemu-run.sh --setup-completion)"
@@ -84,7 +84,7 @@ No unit test framework yet. Verify changes by:
 
 1. Build passes on at least one platform
 2. `scripts/check-patch.sh --staged` passes
-3. QEMU boot test: `tools/qemu-run.sh -m qemu-a9` or `tools/qemu-run.sh -m esp32c3`
+3. QEMU boot test: `tools/qemu-run.sh -M qemu-a9` or `tools/qemu-run.sh -M esp32c3`
 
 ## Key Paths
 
