@@ -5,3 +5,4 @@
 [submodule "vendor/freertos"]
 	path = vendor/freertos
 	url = https://github.com/FreeRTOS/FreeRTOS-Kernel.git
+	branch = V11.2.0
