@@ -7,6 +7,7 @@
 
 #include "claw_os.h"
 #include "claw_config.h"
+#include "claw_net.h"
 #include "ai_engine.h"
 #include "ai_memory.h"
 #include "claw_tools.h"
@@ -14,24 +15,8 @@
 
 #include <string.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 #define TAG "ai"
-
-/* Platform-specific HTTP transport */
-#ifdef CLAW_PLATFORM_ESP_IDF
-#include "sdkconfig.h"
-#include "esp_http_client.h"
-#include "esp_crt_bundle.h"
-#include "esp_log.h"
-#elif defined(CLAW_PLATFORM_RTTHREAD)
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <unistd.h>
-#endif
 
 #define AI_API_KEY      CONFIG_CLAW_AI_API_KEY
 #define AI_API_URL      CONFIG_CLAW_AI_API_URL
@@ -79,46 +64,30 @@ static const char *SYSTEM_PROMPT =
     "Be concise — this is an embedded device with limited display. "
     "Respond in the same language the user uses.";
 
-/* HTTP response collection context */
-typedef struct {
-    char *buf;
-    size_t size;
-    size_t len;
-} resp_ctx_t;
-
 static int is_retryable_status(int status)
 {
     return status == 429 || status == 500 || status == 502 ||
            status == 503 || status == 529;
 }
 
-/* ---- Platform-specific HTTP POST ---- */
-
-#ifdef CLAW_PLATFORM_ESP_IDF
-
-static esp_err_t on_http_event(esp_http_client_event_t *evt)
-{
-    resp_ctx_t *ctx = (resp_ctx_t *)evt->user_data;
-
-    if (evt->event_id == HTTP_EVENT_ON_DATA && ctx) {
-        size_t avail = ctx->size - ctx->len - 1;
-        size_t copy = ((size_t)evt->data_len < avail)
-                      ? (size_t)evt->data_len : avail;
-        if (copy > 0) {
-            memcpy(ctx->buf + ctx->len, evt->data, copy);
-            ctx->len += copy;
-            ctx->buf[ctx->len] = '\0';
-        }
-    }
-    return ESP_OK;
-}
-
-static cJSON *do_api_call(cJSON *req_body, resp_ctx_t *ctx)
+static cJSON *do_api_call(cJSON *req_body)
 {
     char *body_str = cJSON_PrintUnformatted(req_body);
     if (!body_str) {
         return NULL;
     }
+
+    char *resp_buf = claw_malloc(RESP_BUF_SIZE);
+    if (!resp_buf) {
+        cJSON_free(body_str);
+        return NULL;
+    }
+
+    claw_net_header_t headers[] = {
+        { "Content-Type",      "application/json" },
+        { "x-api-key",         AI_API_KEY },
+        { "anthropic-version", "2023-06-01" },
+    };
 
     for (int attempt = 0; attempt <= API_MAX_RETRIES; attempt++) {
         if (attempt > 0) {
@@ -129,41 +98,13 @@ static cJSON *do_api_call(cJSON *req_body, resp_ctx_t *ctx)
             claw_thread_delay_ms(delay);
         }
 
-        ctx->len = 0;
-        ctx->buf[0] = '\0';
+        size_t resp_len = 0;
+        int status = claw_net_post(AI_API_URL, headers, 3,
+                                    body_str, strlen(body_str),
+                                    resp_buf, RESP_BUF_SIZE, &resp_len);
 
-        esp_http_client_config_t http_cfg = {
-            .url = AI_API_URL,
-            .method = HTTP_METHOD_POST,
-            .timeout_ms = 60000,
-            .event_handler = on_http_event,
-            .user_data = ctx,
-            .crt_bundle_attach = esp_crt_bundle_attach,
-            .buffer_size = 4096,
-            .buffer_size_tx = 4096,
-        };
-
-        esp_http_client_handle_t client = esp_http_client_init(&http_cfg);
-        if (!client) {
-            continue;
-        }
-
-        esp_http_client_set_header(client, "Content-Type",
-                                   "application/json");
-        esp_http_client_set_header(client, "x-api-key", AI_API_KEY);
-        esp_http_client_set_header(client, "anthropic-version",
-                                   "2023-06-01");
-        esp_http_client_set_post_field(client, body_str, strlen(body_str));
-
-        esp_err_t err = esp_http_client_perform(client);
-        int status = 0;
-        if (err == ESP_OK) {
-            status = esp_http_client_get_status_code(client);
-        }
-        esp_http_client_cleanup(client);
-
-        if (err != ESP_OK) {
-            CLAW_LOGE(TAG, "HTTP failed: %s", esp_err_to_name(err));
+        if (status < 0) {
+            CLAW_LOGE(TAG, "HTTP transport failed");
             continue;
         }
 
@@ -173,282 +114,23 @@ static cJSON *do_api_call(cJSON *req_body, resp_ctx_t *ctx)
         }
 
         if (status != 200) {
-            CLAW_LOGE(TAG, "HTTP %d: %.200s", status, ctx->buf);
+            CLAW_LOGE(TAG, "HTTP %d: %.200s", status, resp_buf);
             cJSON_free(body_str);
+            claw_free(resp_buf);
             return NULL;
         }
 
         cJSON_free(body_str);
-        return cJSON_Parse(ctx->buf);
+        cJSON *result = cJSON_Parse(resp_buf);
+        claw_free(resp_buf);
+        return result;
     }
 
     CLAW_LOGE(TAG, "API call failed after %d retries", API_MAX_RETRIES);
     cJSON_free(body_str);
+    claw_free(resp_buf);
     return NULL;
 }
-
-#elif defined(CLAW_PLATFORM_RTTHREAD)
-
-/*
- * Minimal HTTP POST via BSD socket.
- * Supports HTTP only (no TLS). For HTTPS endpoints, use an HTTP proxy
- * or a reverse-proxy with TLS termination.
- *
- * URL format: http://host[:port]/path
- */
-
-/* Parse URL into host, port, path components */
-static int parse_url(const char *url, char *host, size_t host_sz,
-                     int *port, char *path, size_t path_sz)
-{
-    const char *p = url;
-
-    /* Detect scheme */
-    if (strncmp(p, "https://", 8) == 0) {
-        *port = 443;
-        p += 8;
-    } else if (strncmp(p, "http://", 7) == 0) {
-        *port = 80;
-        p += 7;
-    } else {
-        return -1;
-    }
-
-    /* Extract host */
-    const char *slash = strchr(p, '/');
-    const char *colon = strchr(p, ':');
-    size_t host_len;
-
-    if (colon && (!slash || colon < slash)) {
-        host_len = colon - p;
-        *port = atoi(colon + 1);
-    } else if (slash) {
-        host_len = slash - p;
-    } else {
-        host_len = strlen(p);
-    }
-
-    if (host_len >= host_sz) {
-        host_len = host_sz - 1;
-    }
-    memcpy(host, p, host_len);
-    host[host_len] = '\0';
-
-    /* Extract path */
-    if (slash) {
-        snprintf(path, path_sz, "%s", slash);
-    } else {
-        snprintf(path, path_sz, "/");
-    }
-
-    return 0;
-}
-
-/* Read HTTP response, skip headers, return body in ctx */
-static int http_recv_response(int sock, resp_ctx_t *ctx, int *status_out)
-{
-    char tmp[512];
-    int total = 0;
-    int header_done = 0;
-    char *body_start = NULL;
-    int content_length = -1;
-    int body_received = 0;
-
-    *status_out = 0;
-    ctx->len = 0;
-    ctx->buf[0] = '\0';
-
-    /* Read response in chunks */
-    while (1) {
-        int n = recv(sock, tmp, sizeof(tmp) - 1, 0);
-        if (n <= 0) {
-            break;
-        }
-        tmp[n] = '\0';
-
-        if (!header_done) {
-            /* Accumulate into ctx->buf until we find \r\n\r\n */
-            size_t avail = ctx->size - ctx->len - 1;
-            size_t copy = ((size_t)n < avail) ? (size_t)n : avail;
-            memcpy(ctx->buf + ctx->len, tmp, copy);
-            ctx->len += copy;
-            ctx->buf[ctx->len] = '\0';
-
-            body_start = strstr(ctx->buf, "\r\n\r\n");
-            if (body_start) {
-                header_done = 1;
-                body_start += 4;
-
-                /* Parse status from first line */
-                if (sscanf(ctx->buf, "HTTP/%*d.%*d %d", status_out) != 1) {
-                    *status_out = 0;
-                }
-
-                /* Try to find Content-Length */
-                char *cl = strstr(ctx->buf, "Content-Length:");
-                if (!cl) {
-                    cl = strstr(ctx->buf, "content-length:");
-                }
-                if (cl) {
-                    content_length = atoi(cl + 15);
-                }
-
-                /* Move body to start of buffer */
-                size_t body_len = ctx->len - (body_start - ctx->buf);
-                memmove(ctx->buf, body_start, body_len);
-                ctx->len = body_len;
-                ctx->buf[ctx->len] = '\0';
-                body_received = (int)body_len;
-            }
-        } else {
-            /* Already past headers, append body data */
-            size_t avail = ctx->size - ctx->len - 1;
-            size_t copy = ((size_t)n < avail) ? (size_t)n : avail;
-            memcpy(ctx->buf + ctx->len, tmp, copy);
-            ctx->len += copy;
-            ctx->buf[ctx->len] = '\0';
-            body_received += n;
-        }
-
-        total += n;
-
-        /* Check if we have all the body */
-        if (header_done && content_length >= 0 &&
-            body_received >= content_length) {
-            break;
-        }
-    }
-
-    return header_done ? 0 : -1;
-}
-
-static cJSON *do_api_call(cJSON *req_body, resp_ctx_t *ctx)
-{
-    char *body_str = cJSON_PrintUnformatted(req_body);
-    if (!body_str) {
-        return NULL;
-    }
-
-    char host[128];
-    char path[256];
-    int port;
-
-    if (parse_url(AI_API_URL, host, sizeof(host),
-                  &port, path, sizeof(path)) < 0) {
-        CLAW_LOGE(TAG, "invalid API URL: %s", AI_API_URL);
-        cJSON_free(body_str);
-        return NULL;
-    }
-
-    /* Warn if HTTPS — no TLS support on this platform */
-    if (port == 443) {
-        CLAW_LOGW(TAG, "HTTPS not supported, trying plain HTTP on port 443");
-    }
-
-    for (int attempt = 0; attempt <= API_MAX_RETRIES; attempt++) {
-        if (attempt > 0) {
-            int delay = API_RETRY_BASE_MS * attempt;
-            CLAW_LOGW(TAG, "retry %d/%d in %dms ...",
-                      attempt, API_MAX_RETRIES, delay);
-            claw_thread_delay_ms(delay);
-        }
-
-        /* DNS resolve */
-        struct hostent *he = gethostbyname(host);
-        if (!he) {
-            CLAW_LOGE(TAG, "DNS resolve failed: %s", host);
-            continue;
-        }
-
-        /* Create socket */
-        int sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock < 0) {
-            CLAW_LOGE(TAG, "socket create failed");
-            continue;
-        }
-
-        /* Set timeout */
-        struct timeval tv;
-        tv.tv_sec = 60;
-        tv.tv_usec = 0;
-        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-        setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-        /* Connect */
-        struct sockaddr_in server;
-        memset(&server, 0, sizeof(server));
-        server.sin_family = AF_INET;
-        server.sin_port = htons(port);
-        memcpy(&server.sin_addr, he->h_addr, he->h_length);
-
-        if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
-            CLAW_LOGE(TAG, "connect failed: %s:%d", host, port);
-            close(sock);
-            continue;
-        }
-
-        /* Build HTTP request */
-        size_t body_len = strlen(body_str);
-        char header[512];
-        int hdr_len = snprintf(header, sizeof(header),
-            "POST %s HTTP/1.1\r\n"
-            "Host: %s\r\n"
-            "Content-Type: application/json\r\n"
-            "x-api-key: %s\r\n"
-            "anthropic-version: 2023-06-01\r\n"
-            "Content-Length: %d\r\n"
-            "Connection: close\r\n"
-            "\r\n",
-            path, host, AI_API_KEY, (int)body_len);
-
-        /* Send header + body */
-        if (send(sock, header, hdr_len, 0) < 0 ||
-            send(sock, body_str, body_len, 0) < 0) {
-            CLAW_LOGE(TAG, "send failed");
-            close(sock);
-            continue;
-        }
-
-        /* Read response */
-        int status = 0;
-        int rc = http_recv_response(sock, ctx, &status);
-        close(sock);
-
-        if (rc < 0) {
-            CLAW_LOGE(TAG, "HTTP response parse failed");
-            continue;
-        }
-
-        if (is_retryable_status(status)) {
-            CLAW_LOGW(TAG, "HTTP %d (transient)", status);
-            continue;
-        }
-
-        if (status != 200) {
-            CLAW_LOGE(TAG, "HTTP %d: %.200s", status, ctx->buf);
-            cJSON_free(body_str);
-            return NULL;
-        }
-
-        cJSON_free(body_str);
-        return cJSON_Parse(ctx->buf);
-    }
-
-    CLAW_LOGE(TAG, "API call failed after %d retries", API_MAX_RETRIES);
-    cJSON_free(body_str);
-    return NULL;
-}
-
-#else /* no HTTP transport */
-
-static cJSON *do_api_call(cJSON *req_body, resp_ctx_t *ctx)
-{
-    (void)req_body;
-    (void)ctx;
-    return NULL;
-}
-
-#endif /* platform-specific HTTP */
 
 /* ---- Shared AI engine logic ---- */
 
@@ -571,13 +253,6 @@ static int ai_chat_with_messages(const char *system_prompt,
                                  cJSON *messages, cJSON *tools,
                                  char *reply, size_t reply_size)
 {
-    char *resp_buf = claw_malloc(RESP_BUF_SIZE);
-    if (!resp_buf) {
-        CLAW_LOGE(TAG, "no memory for response buffer");
-        return CLAW_ERROR;
-    }
-
-    resp_ctx_t ctx = { .buf = resp_buf, .size = RESP_BUF_SIZE, .len = 0 };
     int ret = CLAW_ERROR;
     reply[0] = '\0';
 
@@ -587,7 +262,7 @@ static int ai_chat_with_messages(const char *system_prompt,
 
     for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
         cJSON *req = build_request(system_prompt, messages, tools);
-        cJSON *resp = do_api_call(req, &ctx);
+        cJSON *resp = do_api_call(req);
         cJSON_Delete(req);
 
         if (!resp) {
@@ -645,7 +320,6 @@ static int ai_chat_with_messages(const char *system_prompt,
     }
 
     notify_status(AI_STATUS_DONE, NULL);
-    claw_free(resp_buf);
     return ret;
 }
 
