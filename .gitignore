@@ -49,7 +49,8 @@ packages/
 # Auto-generated
 **/automac.h
 sd.bin
-platform/esp32c3/cross.ini
+platform/esp32c3-qemu/cross.ini
+platform/esp32s3-qemu/cross.ini
 
 # Claude Code
 .claude/

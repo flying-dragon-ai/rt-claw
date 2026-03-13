@@ -72,7 +72,7 @@ LLM API client with Tool Use support:
 
 ## Platforms
 
-### ESP32-C3 (platform/esp32c3/)
+### ESP32-C3 (platform/esp32c3-qemu/)
 
 - CPU: RISC-V 32-bit (rv32imc), 160MHz
 - RAM: 400KB SRAM (~240KB available for app)

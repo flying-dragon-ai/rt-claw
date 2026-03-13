@@ -4,7 +4,7 @@
 # Generate Meson cross-file for ESP32-C3 from ESP-IDF build config.
 #
 # Prerequisites:
-#   cd platform/esp32c3 && idf.py set-target esp32c3
+#   cd platform/esp32c3-qemu && idf.py set-target esp32c3
 #
 # Usage:
 #   python3 scripts/gen-esp32c3-cross.py
@@ -15,9 +15,9 @@ import re
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ESP_BUILD_DIR = os.path.join(PROJECT_ROOT, 'platform', 'esp32c3', 'build')
+ESP_BUILD_DIR = os.path.join(PROJECT_ROOT, 'platform', 'esp32c3-qemu', 'build')
 CC_JSON = os.path.join(ESP_BUILD_DIR, 'compile_commands.json')
-CROSS_INI = os.path.join(PROJECT_ROOT, 'platform', 'esp32c3', 'cross.ini')
+CROSS_INI = os.path.join(PROJECT_ROOT, 'platform', 'esp32c3-qemu', 'cross.ini')
 SDKCONFIG_H = os.path.join(ESP_BUILD_DIR, 'config', 'sdkconfig.h')
 
 
@@ -25,7 +25,7 @@ def main():
     if not os.path.exists(CC_JSON):
         print(f'Error: {CC_JSON} not found.', file=sys.stderr)
         print('Run first:', file=sys.stderr)
-        print('  cd platform/esp32c3 && idf.py set-target esp32c3',
+        print('  cd platform/esp32c3-qemu && idf.py set-target esp32c3',
               file=sys.stderr)
         return 1
 

@@ -54,17 +54,17 @@ This installs:
 source $HOME/esp/esp-idf/export.sh
 
 # Recommended: unified build
-make esp32c3
+make esp32c3-qemu
 
 # Or step-by-step:
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 idf.py set-target esp32c3          # first time only
 idf.py reconfigure                 # generate compile_commands.json
 cd ../..
 python3 scripts/gen-esp32c3-cross.py  # generate Meson cross-file
-meson setup build/esp32c3 --cross-file platform/esp32c3/cross.ini
-meson compile -C build/esp32c3     # cross-compile core code
-cd platform/esp32c3
+meson setup build/esp32c3-qemu --cross-file platform/esp32c3-qemu/cross.ini
+meson compile -C build/esp32c3-qemu   # cross-compile core code
+cd platform/esp32c3-qemu
 idf.py build                       # link into final firmware
 ```
 
@@ -73,8 +73,8 @@ idf.py build                       # link into final firmware
 ### Method 1: Launch script (recommended)
 
 ```bash
-./tools/qemu-run.sh -M esp32c3             # serial only
-./tools/qemu-run.sh -M esp32c3 --graphics  # with LCD display window
+./tools/qemu-run.sh -M esp32c3-qemu             # serial only
+./tools/qemu-run.sh -M esp32c3-qemu --graphics  # with LCD display window
 ```
 
 Enable tab completion (bash/zsh):
@@ -85,7 +85,7 @@ eval "$(tools/qemu-run.sh --setup-completion)"
 ### Method 2: idf.py wrapper
 
 ```bash
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 idf.py qemu monitor
 ```
 
@@ -118,11 +118,11 @@ qemu-system-riscv32 -nographic -icount 3 \
 
 ```bash
 # Terminal 1
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 idf.py qemu --gdb monitor
 
 # Terminal 2
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 idf.py gdb
 ```
 
@@ -130,10 +130,10 @@ idf.py gdb
 
 ```bash
 # Terminal 1
-./tools/qemu-run.sh -M esp32c3 -g
+./tools/qemu-run.sh -M esp32c3-qemu -g
 
 # Terminal 2
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 riscv32-esp-elf-gdb build/rt-claw.elf -ex 'target remote :1234'
 ```
 
@@ -156,7 +156,7 @@ need a compile-time option to use Ethernet when running on QEMU.
 ESP-IDF's `idf.py qemu` handles this automatically. For manual generation:
 
 ```bash
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 esptool.py --chip esp32c3 merge_bin \
     --fill-flash-size 4MB \
     -o build/flash_image.bin \

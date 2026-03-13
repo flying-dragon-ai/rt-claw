@@ -54,17 +54,17 @@ source $HOME/esp/esp-idf/export.sh
 source $HOME/esp/esp-idf/export.sh
 
 # 推荐：统一构建
-make esp32c3
+make esp32c3-qemu
 
 # 或分步操作：
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 idf.py set-target esp32c3          # 仅首次
 idf.py reconfigure                 # 生成 compile_commands.json
 cd ../..
 python3 scripts/gen-esp32c3-cross.py  # 生成 Meson 交叉编译文件
-meson setup build/esp32c3 --cross-file platform/esp32c3/cross.ini
-meson compile -C build/esp32c3     # 交叉编译核心代码
-cd platform/esp32c3
+meson setup build/esp32c3-qemu --cross-file platform/esp32c3-qemu/cross.ini
+meson compile -C build/esp32c3-qemu   # 交叉编译核心代码
+cd platform/esp32c3-qemu
 idf.py build                       # 链接生成最终固件
 ```
 
@@ -73,8 +73,8 @@ idf.py build                       # 链接生成最终固件
 ### 方式一：统一脚本（推荐）
 
 ```bash
-./tools/qemu-run.sh -M esp32c3             # 仅串口
-./tools/qemu-run.sh -M esp32c3 --graphics  # 带 LCD 显示窗口
+./tools/qemu-run.sh -M esp32c3-qemu             # 仅串口
+./tools/qemu-run.sh -M esp32c3-qemu --graphics  # 带 LCD 显示窗口
 ```
 
 启用 Tab 补全（bash/zsh）：
@@ -85,7 +85,7 @@ eval "$(tools/qemu-run.sh --setup-completion)"
 ### 方式二：idf.py 封装
 
 ```bash
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 idf.py qemu monitor
 ```
 
@@ -118,11 +118,11 @@ qemu-system-riscv32 -nographic -icount 3 \
 
 ```bash
 # 终端 1
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 idf.py qemu --gdb monitor
 
 # 终端 2
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 idf.py gdb
 ```
 
@@ -130,10 +130,10 @@ idf.py gdb
 
 ```bash
 # 终端 1
-./tools/qemu-run.sh -M esp32c3 -g
+./tools/qemu-run.sh -M esp32c3-qemu -g
 
 # 终端 2
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 riscv32-esp-elf-gdb build/rt-claw.elf -ex 'target remote :1234'
 ```
 
@@ -156,7 +156,7 @@ WiFi 不支持仿真。QEMU 通过 OpenCores MAC 提供虚拟以太网。
 ESP-IDF 的 `idf.py qemu` 会自动处理。手动生成：
 
 ```bash
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 esptool.py --chip esp32c3 merge_bin \
     --fill-flash-size 4MB \
     -o build/flash_image.bin \

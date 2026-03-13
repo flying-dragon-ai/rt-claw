@@ -1,5 +1,5 @@
 set(RT_CLAW_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../..")
-set(MESON_BUILD_DIR "${RT_CLAW_ROOT}/build/esp32s3")
+set(MESON_BUILD_DIR "${RT_CLAW_ROOT}/build/esp32s3-qemu")
 
 # Headers exported to dependent components (e.g. main)
 set(CLAW_INC_DIRS
@@ -61,5 +61,5 @@ if(_all_meson_objs)
     )
 else()
     message(WARNING "No Meson objects found in ${MESON_BUILD_DIR}. "
-                    "Run 'meson compile -C build/esp32s3' first.")
+                    "Run 'meson compile -C build/esp32s3-qemu' first.")
 endif()

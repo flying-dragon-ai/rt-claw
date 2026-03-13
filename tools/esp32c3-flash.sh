@@ -5,14 +5,14 @@
 #   port: serial port (default: /dev/ttyUSB0)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLATFORM_DIR="$(dirname "$SCRIPT_DIR")/platform/esp32c3"
+PLATFORM_DIR="$(dirname "$SCRIPT_DIR")/platform/esp32c3-qemu"
 PORT="${1:-/dev/ttyUSB0}"
 
 cd "$PLATFORM_DIR" || exit 1
 
 if [ ! -d "build" ]; then
     echo "Error: build/ not found. Build first:"
-    echo "  cd platform/esp32c3"
+    echo "  cd platform/esp32c3-qemu"
     echo "  idf.py set-target esp32c3"
     echo "  idf.py build"
     exit 1

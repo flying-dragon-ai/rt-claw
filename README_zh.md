@@ -113,7 +113,7 @@ sudo pacman -S --needed libgcrypt glib2 pixman sdl2 libslirp \
 
 ```bash
 source $HOME/esp/esp-idf/export.sh
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 
 # 选择一个预设：
 cp sdkconfig.defaults.demo sdkconfig.defaults    # 快速体验
@@ -152,10 +152,10 @@ idf.py menuconfig
 
 ```bash
 # 统一构建（推荐）
-make esp32c3
+make esp32c3-qemu
 
 # 在 QEMU 上运行
-./tools/qemu-run.sh -M esp32c3
+./tools/qemu-run.sh -M esp32c3-qemu
 
 # 或烧录到真实硬件（未测试）
 idf.py -p /dev/ttyUSB0 flash monitor
@@ -187,7 +187,7 @@ python3 tools/api-proxy.py https://api.anthropic.com &
 rt-claw/
 ├── meson.build                  # Meson 构建定义（交叉编译 src + osal）
 ├── meson.options                # Meson 构建选项（OSAL 后端、功能开关、AI 配置）
-├── Makefile                     # 统一构建入口（make esp32c3 / make qemu-a9）
+├── Makefile                     # 统一构建入口（make esp32c3-qemu / make qemu-a9）
 ├── osal/                        # 操作系统抽象层
 │   ├── include/claw_os.h       #   统一 RTOS API
 │   ├── freertos/                #   FreeRTOS 实现
@@ -201,7 +201,7 @@ rt-claw/
 │   ├── services/swarm/          #   蜂群智能
 │   └── tools/                   #   Tool Use 框架（GPIO、系统信息、LCD）
 ├── platform/
-│   ├── esp32c3/                 # ESP-IDF 工程（Meson + CMake）
+│   ├── esp32c3-qemu/            # ESP32-C3 QEMU（ESP-IDF, Meson + CMake）
 │   └── qemu-a9-rtthread/       # RT-Thread BSP（Meson + SCons）
 ├── vendor/
 │   ├── freertos/                # FreeRTOS-Kernel（子模块）
@@ -213,7 +213,7 @@ rt-claw/
 │   ├── gen-esp32c3-cross.py    # 从 ESP-IDF 自动生成 Meson 交叉编译文件
 │   └── ...
 └── tools/
-    ├── qemu-run.sh              # 统一 QEMU 启动器（-M qemu-a9 / -M esp32c3）
+    ├── qemu-run.sh              # 统一 QEMU 启动器（-M qemu-a9 / -M esp32c3-qemu）
     ├── api-proxy.py             # HTTP→HTTPS 代理（RT-Thread QEMU 无 TLS）
     └── ...
 ```

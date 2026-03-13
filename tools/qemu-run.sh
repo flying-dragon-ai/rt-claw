@@ -7,14 +7,14 @@
 #   ./tools/qemu-run.sh -M <machine> [options]
 #
 # Machines:
-#   qemu-a9   QEMU vexpress-a9 (RT-Thread, ARM Cortex-A9)
-#   esp32c3   QEMU ESP32-C3 (ESP-IDF, Espressif QEMU fork)
-#   esp32s3   QEMU ESP32-S3 (ESP-IDF, Espressif QEMU fork)
+#   qemu-a9        QEMU vexpress-a9 (RT-Thread, ARM Cortex-A9)
+#   esp32c3-qemu   QEMU ESP32-C3 (ESP-IDF, Espressif QEMU fork)
+#   esp32s3-qemu   QEMU ESP32-S3 (ESP-IDF, Espressif QEMU fork)
 #
 # Options:
 #   -M MACHINE   Target machine (required)
 #   -g           Enable GDB server (debug mode, port 1234)
-#   --graphics   Enable LCD display window (esp32c3 only)
+#   --graphics   Enable LCD display window (esp32c3-qemu only)
 #   -h           Show this help
 #
 # Shell completion:
@@ -25,7 +25,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-MACHINES="qemu-a9 esp32c3 esp32s3"
+MACHINES="qemu-a9 esp32c3-qemu esp32s3-qemu"
 MACHINE=""
 GDB_MODE=0
 GRAPHICS=0
@@ -45,7 +45,7 @@ _qemu_run() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    machines="qemu-a9 esp32c3 esp32s3"
+    machines="qemu-a9 esp32c3-qemu esp32s3-qemu"
     opts="-M -g --graphics -h --help"
 
     case "$prev" in
@@ -129,10 +129,10 @@ run_qemu_a9() {
         $gdb_flags
 }
 
-# ---- esp32c3: QEMU ESP32-C3 (Espressif fork) ----
+# ---- esp32c3-qemu: QEMU ESP32-C3 (Espressif fork) ----
 
-run_esp32c3() {
-    local platform_dir="$PROJECT_ROOT/platform/esp32c3"
+run_esp32c3_qemu() {
+    local platform_dir="$PROJECT_ROOT/platform/esp32c3-qemu"
 
     cd "$platform_dir" || exit 1
 
@@ -144,7 +144,7 @@ run_esp32c3() {
 
     if [ ! -d "build" ]; then
         echo "Error: build/ not found. Build first:"
-        echo "  make esp32c3"
+        echo "  make esp32c3-qemu"
         exit 1
     fi
 
@@ -178,10 +178,10 @@ run_esp32c3() {
         $gdb_flags
 }
 
-# ---- esp32s3: QEMU ESP32-S3 (Espressif fork) ----
+# ---- esp32s3-qemu: QEMU ESP32-S3 (Espressif fork) ----
 
-run_esp32s3() {
-    local platform_dir="$PROJECT_ROOT/platform/esp32s3"
+run_esp32s3_qemu() {
+    local platform_dir="$PROJECT_ROOT/platform/esp32s3-qemu"
 
     cd "$platform_dir" || exit 1
 
@@ -193,7 +193,7 @@ run_esp32s3() {
 
     if [ ! -d "build" ]; then
         echo "Error: build/ not found. Build first:"
-        echo "  make esp32s3"
+        echo "  make esp32s3-qemu"
         exit 1
     fi
 
@@ -230,9 +230,9 @@ run_esp32s3() {
 # ---- dispatch ----
 
 case "$MACHINE" in
-    qemu-a9)  run_qemu_a9 ;;
-    esp32c3)  run_esp32c3 ;;
-    esp32s3)  run_esp32s3 ;;
+    qemu-a9)       run_qemu_a9 ;;
+    esp32c3-qemu)  run_esp32c3_qemu ;;
+    esp32s3-qemu)  run_esp32s3_qemu ;;
     *)
         echo "Error: unknown machine '$MACHINE'"
         echo "Available: $MACHINES"

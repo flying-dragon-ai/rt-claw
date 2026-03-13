@@ -6,7 +6,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLATFORM_DIR="$(dirname "$SCRIPT_DIR")/platform/esp32c3"
+PLATFORM_DIR="$(dirname "$SCRIPT_DIR")/platform/esp32c3-qemu"
 
 if [ -z "$IDF_PATH" ]; then
     echo "Error: IDF_PATH not set. Source ESP-IDF first:"
@@ -27,5 +27,5 @@ idf.py build
 
 echo ""
 echo "=== Build Complete ==="
-echo "Run on QEMU:  ./tools/qemu-run.sh -M esp32c3"
+echo "Run on QEMU:  ./tools/qemu-run.sh -M esp32c3-qemu"
 echo "Flash device: idf.py -p /dev/ttyUSB0 flash monitor"

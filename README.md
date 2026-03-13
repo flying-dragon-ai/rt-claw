@@ -116,7 +116,7 @@ sudo pacman -S --needed libgcrypt glib2 pixman sdl2 libslirp \
 
 ```bash
 source $HOME/esp/esp-idf/export.sh
-cd platform/esp32c3
+cd platform/esp32c3-qemu
 
 # Pick one:
 cp sdkconfig.defaults.demo sdkconfig.defaults    # Quick Demo
@@ -157,10 +157,10 @@ on boot — no public IP required.
 
 ```bash
 # Unified build (recommended)
-make esp32c3
+make esp32c3-qemu
 
 # Run on QEMU
-./tools/qemu-run.sh -M esp32c3
+./tools/qemu-run.sh -M esp32c3-qemu
 
 # Or flash to real hardware (untested)
 idf.py -p /dev/ttyUSB0 flash monitor
@@ -192,7 +192,7 @@ python3 tools/api-proxy.py https://api.anthropic.com &
 rt-claw/
 ├── meson.build                  # Meson build definition (cross-compiles src + osal)
 ├── meson.options                # Meson build options (osal backend, features, AI config)
-├── Makefile                     # Unified build entry (make esp32c3 / make qemu-a9)
+├── Makefile                     # Unified build entry (make esp32c3-qemu / make qemu-a9)
 ├── osal/                        # OS Abstraction Layer
 │   ├── include/claw_os.h       #   Unified RTOS API
 │   ├── freertos/                #   FreeRTOS implementation
@@ -206,7 +206,7 @@ rt-claw/
 │   ├── services/swarm/          #   Swarm intelligence
 │   └── tools/                   #   Tool Use framework (GPIO, system, LCD)
 ├── platform/
-│   ├── esp32c3/                 # ESP-IDF project (Meson + CMake)
+│   ├── esp32c3-qemu/            # ESP32-C3 QEMU (ESP-IDF, Meson + CMake)
 │   └── qemu-a9-rtthread/       # RT-Thread BSP (Meson + SCons)
 ├── vendor/
 │   ├── freertos/                # FreeRTOS-Kernel (submodule)
@@ -218,7 +218,7 @@ rt-claw/
 │   ├── gen-esp32c3-cross.py     # Auto-generate Meson cross-file from ESP-IDF
 │   └── ...
 └── tools/
-    ├── qemu-run.sh              # Unified QEMU launcher (-M qemu-a9 / -M esp32c3)
+    ├── qemu-run.sh              # Unified QEMU launcher (-M qemu-a9 / -M esp32c3-qemu)
     ├── api-proxy.py             # HTTP→HTTPS proxy for QEMU (no TLS on RT-Thread)
     └── ...
 ```

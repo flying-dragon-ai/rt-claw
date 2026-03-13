@@ -11,8 +11,8 @@ All outputs go to `build/<platform>/`.
 ```bash
 # Unified entry (from project root)
 make qemu-a9                           # Meson + SCons → build/qemu-a9/
-make esp32c3                           # Meson + idf.py (requires ESP-IDF)
-make esp32s3                           # Meson + idf.py (requires ESP-IDF)
+make esp32c3-qemu                      # Meson + idf.py (requires ESP-IDF)
+make esp32s3-qemu                      # Meson + idf.py (requires ESP-IDF)
 
 # Meson only (libraries)
 meson setup build/qemu-a9 --cross-file platform/qemu-a9-rtthread/cross.ini
@@ -20,13 +20,13 @@ meson compile -C build/qemu-a9
 
 # ESP32-C3: auto-generated cross.ini from ESP-IDF config
 python3 scripts/gen-esp32c3-cross.py
-meson setup build/esp32c3 --cross-file platform/esp32c3/cross.ini
-meson compile -C build/esp32c3
+meson setup build/esp32c3-qemu --cross-file platform/esp32c3-qemu/cross.ini
+meson compile -C build/esp32c3-qemu
 
 # ESP32-S3: auto-generated cross.ini from ESP-IDF config
 python3 scripts/gen-esp32s3-cross.py
-meson setup build/esp32s3 --cross-file platform/esp32s3/cross.ini
-meson compile -C build/esp32s3
+meson setup build/esp32s3-qemu --cross-file platform/esp32s3-qemu/cross.ini
+meson compile -C build/esp32s3-qemu
 ```
 
 ## Run
@@ -38,16 +38,16 @@ tools/qemu-run.sh -M qemu-a9           # launch only (must build first)
 tools/qemu-run.sh -M qemu-a9 -g        # debug mode (GDB port 1234)
 
 # ESP32-C3 QEMU (requires ESP-IDF)
-make run-esp32c3                       # build + launch QEMU
-tools/qemu-run.sh -M esp32c3           # launch only
-tools/qemu-run.sh -M esp32c3 --graphics  # with LCD display window
-tools/qemu-run.sh -M esp32c3 -g        # debug mode (GDB port 1234)
+make run-esp32c3-qemu                  # build + launch QEMU
+tools/qemu-run.sh -M esp32c3-qemu     # launch only
+tools/qemu-run.sh -M esp32c3-qemu --graphics  # with LCD display window
+tools/qemu-run.sh -M esp32c3-qemu -g  # debug mode (GDB port 1234)
 
 # ESP32-S3 QEMU (requires ESP-IDF)
-make run-esp32s3                       # build + launch QEMU
-tools/qemu-run.sh -M esp32s3           # launch only
-tools/qemu-run.sh -M esp32s3 --graphics  # with LCD display window
-tools/qemu-run.sh -M esp32s3 -g        # debug mode (GDB port 1234)
+make run-esp32s3-qemu                  # build + launch QEMU
+tools/qemu-run.sh -M esp32s3-qemu     # launch only
+tools/qemu-run.sh -M esp32s3-qemu --graphics  # with LCD display window
+tools/qemu-run.sh -M esp32s3-qemu -g  # debug mode (GDB port 1234)
 
 # Shell completion
 eval "$(tools/qemu-run.sh --setup-completion)"
@@ -96,7 +96,7 @@ No unit test framework yet. Verify changes by:
 
 1. Build passes on at least one platform
 2. `scripts/check-patch.sh --staged` passes
-3. QEMU boot test: `tools/qemu-run.sh -M qemu-a9` or `tools/qemu-run.sh -M esp32c3` or `tools/qemu-run.sh -M esp32s3`
+3. QEMU boot test: `tools/qemu-run.sh -M qemu-a9` or `tools/qemu-run.sh -M esp32c3-qemu` or `tools/qemu-run.sh -M esp32s3-qemu`
 
 ## Key Paths
 
@@ -114,10 +114,10 @@ No unit test framework yet. Verify changes by:
 | `src/core/gateway.*` | Message router |
 | `src/services/{ai,net,swarm}/` | Service modules |
 | `src/tools/` | Tool Use framework |
-| `platform/esp32c3/` | ESP32-C3 ESP-IDF project + auto-gen cross-file |
-| `platform/esp32s3/` | ESP32-S3 ESP-IDF project + auto-gen cross-file |
+| `platform/esp32c3-qemu/` | ESP32-C3 QEMU ESP-IDF project + auto-gen cross-file |
+| `platform/esp32s3-qemu/` | ESP32-S3 QEMU ESP-IDF project + auto-gen cross-file |
 | `platform/qemu-a9-rtthread/` | RT-Thread BSP + Meson cross-file |
 | `scripts/gen-esp32c3-cross.py` | Generate ESP32-C3 Meson cross-file |
 | `scripts/gen-esp32s3-cross.py` | Generate ESP32-S3 Meson cross-file |
-| `tools/qemu-run.sh` | Unified QEMU launcher (-M qemu-a9/esp32c3/esp32s3) |
+| `tools/qemu-run.sh` | Unified QEMU launcher (-M qemu-a9/esp32c3-qemu/esp32s3-qemu) |
 | `tools/api-proxy.py` | HTTP→HTTPS proxy for QEMU without TLS |

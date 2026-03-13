@@ -71,7 +71,7 @@ LLM API 客户端，支持 Tool Use：
 
 ## 平台
 
-### ESP32-C3（platform/esp32c3/）
+### ESP32-C3（platform/esp32c3-qemu/）
 
 - CPU：RISC-V 32 位（rv32imc），160MHz
 - RAM：400KB SRAM（约 240KB 可用于应用）
