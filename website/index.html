@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.js"></script>
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -45,7 +45,7 @@
 
         .container { max-width: 1200px; margin: 0 auto; padding: 0 2rem; }
 
-        /* ─── Nav ─── */
+        /* Nav */
         nav {
             position: fixed; top: 0; width: 100%; z-index: 100;
             background: rgba(15, 23, 42, 0.88);
@@ -71,14 +71,16 @@
         .nav-btn {
             display: inline-flex; align-items: center; gap: 0.4rem;
             padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem;
-            background: var(--accent); color: var(--bg); border: none; cursor: pointer;
+            background: var(--accent); color: #fff; border: none; cursor: pointer;
             transition: transform 0.15s, box-shadow 0.15s;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
         .nav-btn:hover {
             transform: translateY(-1px);
             box-shadow: 0 4px 16px rgba(245, 158, 11, 0.3);
-            color: var(--bg);
+            color: #fff;
         }
+        .nav-btn svg { filter: drop-shadow(0 1px 1px rgba(0,0,0,0.2)); }
         .nav-github {
             color: var(--text-muted); display: flex; align-items: center;
             transition: color 0.2s;
@@ -90,7 +92,7 @@
             color: var(--text); font-size: 1.5rem; cursor: pointer;
         }
 
-        /* ─── Hero ─── */
+        /* Hero */
         .hero {
             min-height: 100vh; display: flex; align-items: center; justify-content: center;
             text-align: center; padding: 6rem 2rem 4rem;
@@ -137,9 +139,9 @@
         .btn:hover { transform: translateY(-2px); }
         .btn-primary {
             background: linear-gradient(135deg, var(--accent), #d97706);
-            color: var(--bg); border: none;
+            color: #fff; border: none; text-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
-        .btn-primary:hover { box-shadow: 0 6px 24px rgba(245, 158, 11, 0.35); color: var(--bg); }
+        .btn-primary:hover { box-shadow: 0 6px 24px rgba(245, 158, 11, 0.35); color: #fff; }
         .btn-outline {
             border: 1.5px solid var(--border); color: var(--text); background: transparent;
         }
@@ -156,7 +158,7 @@
             50% { transform: translateX(-50%) translateY(8px); }
         }
 
-        /* ─── Stats Bar ─── */
+        /* Stats Bar */
         .stats {
             border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
             background: var(--bg-alt); padding: 2.5rem 2rem;
@@ -174,7 +176,7 @@
             text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500;
         }
 
-        /* ─── Section Common ─── */
+        /* Section Common */
         section { padding: 6rem 0; }
         .section-label {
             text-align: center; font-size: 0.8rem; text-transform: uppercase;
@@ -190,7 +192,7 @@
             max-width: 600px; margin: 0 auto 3.5rem; font-size: 1rem;
         }
 
-        /* ─── Highlights (3-col) ─── */
+        /* Highlights (3-col) */
         .highlights-grid {
             display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
         }
@@ -222,7 +224,7 @@
         .highlight-card h3 { font-size: 1.15rem; margin-bottom: 0.6rem; font-weight: 600; }
         .highlight-card p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; }
 
-        /* ─── Features Grid ─── */
+        /* Features Grid */
         .features-grid {
             display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 1.25rem;
@@ -240,7 +242,7 @@
         .feature-card h3 { font-size: 1rem; margin-bottom: 0.4rem; font-weight: 600; }
         .feature-card p { color: var(--text-muted); font-size: 0.85rem; line-height: 1.6; }
 
-        /* ─── Architecture ─── */
+        /* Architecture */
         .arch-section {
             background: var(--bg-alt);
             border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
@@ -252,14 +254,14 @@
             line-height: 1.6; color: var(--accent); white-space: pre; text-align: center;
         }
 
-        /* ─── Demo ─── */
+        /* Demo */
         .demo-img {
             display: block; max-width: 700px; width: 100%; margin: 0 auto;
             border-radius: var(--radius); border: 1px solid var(--border);
             box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
         }
 
-        /* ─── Platforms ─── */
+        /* Platforms */
         .platforms-grid {
             display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 1.5rem;
@@ -290,7 +292,7 @@
             content: '\203A'; color: var(--accent); margin-right: 0.5rem; font-weight: 700;
         }
 
-        /* ─── Status Table ─── */
+        /* Status Table */
         .status-wrap { overflow-x: auto; margin-top: 3rem; }
         .status-table { width: 100%; border-collapse: collapse; }
         .status-table th, .status-table td {
@@ -309,43 +311,102 @@
         .badge-wip { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
         .badge-planned { background: rgba(148, 163, 184, 0.12); color: var(--text-muted); }
 
-        /* ─── Flash & Monitor ─── */
-        .flash-section { background: var(--bg-alt); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        /* Flash & Monitor */
+        .flash-section {
+            background: var(--bg-alt);
+            border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+        }
         .flash-layout {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: start;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; align-items: start;
         }
-        .flash-info h3 { font-size: 1.3rem; font-weight: 700; margin-bottom: 1rem; }
-        .flash-info p { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.7; }
-        .flash-steps { list-style: none; margin-bottom: 2rem; }
-        .flash-steps li {
-            display: flex; align-items: flex-start; gap: 0.75rem;
-            padding: 0.5rem 0; color: var(--text-muted); font-size: 0.9rem;
+        .flash-panel {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); overflow: hidden;
         }
-        .flash-step-num {
-            flex-shrink: 0; width: 28px; height: 28px;
-            display: flex; align-items: center; justify-content: center;
-            border-radius: 50%; background: rgba(245, 158, 11, 0.15);
-            color: var(--accent); font-weight: 700; font-size: 0.8rem;
+        .flash-panel-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border);
+            background: rgba(245, 158, 11, 0.04);
+        }
+        .flash-panel-header h3 {
+            font-size: 0.9rem; font-weight: 600;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        .flash-panel-header h3 svg { color: var(--accent); }
+        .flash-panel-body { padding: 1.5rem; }
+
+        .flash-config { display: flex; flex-direction: column; gap: 1.25rem; }
+        .flash-field label {
+            display: block; font-size: 0.8rem; font-weight: 500;
+            color: var(--text-muted); margin-bottom: 0.4rem;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .flash-field select {
+            width: 100%; padding: 0.6rem 0.75rem; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--bg);
+            color: var(--text); font-family: var(--font); font-size: 0.88rem;
+            outline: none; cursor: pointer; appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 0.75rem center;
+        }
+        .flash-field select:focus { border-color: var(--accent); }
+
+        .flash-actions { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+        .flash-btn {
+            flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+            padding: 0.75rem 1.25rem; border-radius: 8px; font-weight: 600; font-size: 0.9rem;
+            font-family: var(--font); border: none; cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+        }
+        .flash-btn:hover { transform: translateY(-1px); }
+        .flash-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .flash-btn-primary {
+            background: linear-gradient(135deg, var(--accent), #d97706);
+            color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .flash-btn-primary:hover:not(:disabled) { box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35); }
+        .flash-btn-danger {
+            background: transparent; border: 1px solid #ef4444; color: #ef4444;
+        }
+        .flash-btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.1); }
+        .flash-btn-outline {
+            background: transparent; border: 1px solid var(--border); color: var(--text);
+        }
+        .flash-btn-outline:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+        .flash-progress {
+            margin-top: 1rem; display: none;
+        }
+        .flash-progress-bar {
+            height: 6px; border-radius: 3px; background: var(--bg);
+            overflow: hidden;
+        }
+        .flash-progress-fill {
+            height: 100%; width: 0%; border-radius: 3px;
+            background: linear-gradient(90deg, var(--accent), var(--accent3));
+            transition: width 0.2s;
+        }
+        .flash-progress-text {
+            font-size: 0.78rem; color: var(--text-muted); margin-top: 0.4rem;
             font-family: var(--mono);
         }
-        .flash-actions { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
 
-        esp-web-install-button {
-            --esp-tools-button-color: var(--accent);
-        }
-        esp-web-install-button button {
-            display: inline-flex; align-items: center; gap: 0.5rem;
-            padding: 0.75rem 1.75rem; border-radius: 8px; font-weight: 600;
-            font-size: 0.95rem; font-family: var(--font);
-            background: linear-gradient(135deg, var(--accent), #d97706);
-            color: var(--bg); border: none; cursor: pointer;
-            transition: transform 0.15s, box-shadow 0.15s;
-        }
-        esp-web-install-button button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 24px rgba(245, 158, 11, 0.35);
+        .flash-log {
+            margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 8px;
+            background: #0c0c0c; border: 1px solid var(--border);
+            font-family: var(--mono); font-size: 0.78rem; line-height: 1.5;
+            color: #4ade80; height: 160px; overflow-y: auto; white-space: pre-wrap;
+            word-break: break-all; display: none;
         }
 
+        .flash-unsupported {
+            padding: 1rem; border-radius: 8px;
+            background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2);
+            color: var(--text-muted); font-size: 0.88rem; text-align: center;
+            display: none;
+        }
+
+        /* Serial Terminal */
         .serial-panel {
             background: #0c0c0c; border: 1px solid var(--border);
             border-radius: var(--radius); overflow: hidden;
@@ -355,29 +416,40 @@
             padding: 0.6rem 1rem; background: #1a1a2e; border-bottom: 1px solid var(--border);
         }
         .serial-titlebar span {
-            font-family: var(--mono); font-size: 0.8rem; color: var(--text-muted);
+            font-family: var(--mono); font-size: 0.82rem; color: var(--text-muted);
+            display: flex; align-items: center; gap: 0.5rem;
         }
-        .serial-controls { display: flex; gap: 0.5rem; }
-        .serial-btn {
-            padding: 0.35rem 0.8rem; border-radius: 6px; font-size: 0.78rem;
+        .serial-status {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #475569; display: inline-block;
+        }
+        .serial-status.connected { background: var(--accent3); }
+        .serial-controls { display: flex; gap: 0.5rem; align-items: center; }
+        .serial-baud {
+            padding: 0.3rem 0.5rem; border-radius: 4px; font-size: 0.75rem;
+            border: 1px solid var(--border); background: transparent;
+            color: var(--text-muted); font-family: var(--mono);
+            outline: none; cursor: pointer; appearance: none;
+        }
+        .serial-ctrl-btn {
+            padding: 0.3rem 0.7rem; border-radius: 5px; font-size: 0.75rem;
             font-weight: 500; border: 1px solid var(--border); background: transparent;
             color: var(--text-muted); cursor: pointer; font-family: var(--font);
             transition: border-color 0.2s, color 0.2s;
         }
-        .serial-btn:hover { border-color: var(--accent); color: var(--accent); }
-        .serial-btn.connected { border-color: var(--accent3); color: var(--accent3); }
-        .serial-btn.disconnect { border-color: #ef4444; color: #ef4444; }
+        .serial-ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .serial-ctrl-btn.active { border-color: var(--accent3); color: var(--accent3); }
         .serial-output {
-            padding: 1rem; height: 320px; overflow-y: auto;
-            font-family: var(--mono); font-size: 0.82rem; line-height: 1.5;
-            color: #4ade80; white-space: pre-wrap; word-break: break-all;
+            padding: 0.75rem 1rem; height: 360px; overflow-y: auto;
+            font-family: var(--mono); font-size: 0.8rem; line-height: 1.5;
+            color: #d4d4d4; white-space: pre-wrap; word-break: break-all;
         }
         .serial-input-bar {
             display: flex; border-top: 1px solid var(--border);
         }
         .serial-input-bar input {
             flex: 1; background: transparent; border: none; padding: 0.6rem 1rem;
-            font-family: var(--mono); font-size: 0.82rem; color: var(--text);
+            font-family: var(--mono); font-size: 0.8rem; color: var(--text);
             outline: none;
         }
         .serial-input-bar input::placeholder { color: #475569; }
@@ -385,9 +457,11 @@
             padding: 0.6rem 1rem; background: transparent; border: none;
             border-left: 1px solid var(--border); color: var(--accent);
             cursor: pointer; font-family: var(--font); font-weight: 500; font-size: 0.82rem;
+            transition: background 0.2s;
         }
+        .serial-input-bar button:hover { background: rgba(245, 158, 11, 0.1); }
 
-        /* ─── Community ─── */
+        /* Community */
         .community-links { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
         .community-link {
             display: inline-flex; align-items: center; gap: 0.6rem;
@@ -400,7 +474,7 @@
             transform: translateY(-2px); color: var(--text);
         }
 
-        /* ─── Footer ─── */
+        /* Footer */
         footer {
             border-top: 1px solid var(--border); padding: 3rem 2rem;
             text-align: center; color: var(--text-muted); font-size: 0.85rem;
@@ -409,14 +483,14 @@
         footer a { color: var(--text-muted); }
         footer a:hover { color: var(--accent); }
 
-        /* ─── Scroll Reveal ─── */
+        /* Scroll Reveal */
         .reveal {
             opacity: 0; transform: translateY(24px);
             transition: opacity 0.6s ease, transform 0.6s ease;
         }
         .reveal.visible { opacity: 1; transform: translateY(0); }
 
-        /* ─── Mobile ─── */
+        /* Mobile */
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .nav-toggle { display: block; }
@@ -453,7 +527,7 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/></svg>
             </a></li>
             <li><a href="#flash" class="nav-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 Flash
             </a></li>
         </ul>
@@ -711,58 +785,77 @@
     <div class="container">
         <div class="section-label reveal">Web Flash</div>
         <h2 class="section-title reveal">Flash &amp; Monitor</h2>
-        <p class="section-subtitle reveal">Flash firmware and open a serial terminal — directly from your browser.</p>
-        <div class="flash-layout">
-            <div class="flash-info reveal">
-                <h3>One-Click Firmware Install</h3>
-                <p>No toolchain. No command line. Connect your ESP32-S3 via USB and flash RT-Claw in seconds using the Web Serial API.</p>
-                <ol class="flash-steps">
-                    <li>
-                        <span class="flash-step-num">1</span>
-                        <span>Connect your ESP32-S3 board via USB cable</span>
-                    </li>
-                    <li>
-                        <span class="flash-step-num">2</span>
-                        <span>Click <strong>Install RT-Claw</strong> and select the serial port</span>
-                    </li>
-                    <li>
-                        <span class="flash-step-num">3</span>
-                        <span>Wait for flashing to complete (~60 seconds)</span>
-                    </li>
-                    <li>
-                        <span class="flash-step-num">4</span>
-                        <span>Use the serial terminal below to interact with your device</span>
-                    </li>
-                </ol>
-                <div class="flash-actions">
-                    <esp-web-install-button manifest="firmware/manifest.json">
-                        <button slot="activate">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                            Install RT-Claw
-                        </button>
-                        <span slot="unsupported">
-                            <span style="color: var(--text-muted); font-size: 0.88rem;">
-                                Your browser does not support Web Serial.<br>
-                                Please use Chrome or Edge on desktop.
-                            </span>
-                        </span>
-                        <span slot="not-allowed">
-                            <span style="color: var(--text-muted); font-size: 0.88rem;">
-                                Web Serial requires HTTPS. Please visit via HTTPS.
-                            </span>
-                        </span>
-                    </esp-web-install-button>
+        <p class="section-subtitle reveal">Flash firmware and open a serial terminal — directly from your browser. Requires Chrome or Edge.</p>
+
+        <div id="flash-unsupported" class="flash-unsupported reveal">
+            <strong>Web Serial API is not available.</strong><br>
+            Please use <strong>Chrome</strong> or <strong>Edge</strong> on desktop, and make sure you're on <strong>HTTPS</strong> or <strong>localhost</strong>.
+        </div>
+
+        <div id="flash-main" class="flash-layout">
+            <!-- Flash Panel -->
+            <div class="flash-panel reveal">
+                <div class="flash-panel-header">
+                    <h3>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        Firmware Flash
+                    </h3>
+                </div>
+                <div class="flash-panel-body">
+                    <div class="flash-config">
+                        <div class="flash-field">
+                            <label>Baud Rate</label>
+                            <select id="flash-baudrate">
+                                <option value="921600" selected>921600</option>
+                                <option value="460800">460800</option>
+                                <option value="230400">230400</option>
+                                <option value="115200">115200</option>
+                            </select>
+                        </div>
+                        <div class="flash-actions">
+                            <button class="flash-btn flash-btn-primary" id="flash-btn" onclick="flashFirmware()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                Install RT-Claw
+                            </button>
+                            <button class="flash-btn flash-btn-outline" id="flash-erase-btn" onclick="eraseFlash()" style="display:none">
+                                Erase
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flash-progress" id="flash-progress">
+                        <div class="flash-progress-bar">
+                            <div class="flash-progress-fill" id="flash-progress-fill"></div>
+                        </div>
+                        <div class="flash-progress-text" id="flash-progress-text">0%</div>
+                    </div>
+                    <div class="flash-log" id="flash-log"></div>
                 </div>
             </div>
+
+            <!-- Serial Terminal -->
             <div class="serial-panel reveal">
                 <div class="serial-titlebar">
-                    <span>Serial Monitor</span>
+                    <span>
+                        <span class="serial-status" id="serial-status"></span>
+                        Serial Monitor
+                    </span>
                     <div class="serial-controls">
-                        <button class="serial-btn" id="serial-connect-btn" onclick="serialToggle()">Connect</button>
-                        <button class="serial-btn" onclick="serialClear()">Clear</button>
+                        <select class="serial-baud" id="serial-baudrate">
+                            <option value="115200" selected>115200</option>
+                            <option value="9600">9600</option>
+                            <option value="19200">19200</option>
+                            <option value="38400">38400</option>
+                            <option value="57600">57600</option>
+                            <option value="230400">230400</option>
+                            <option value="460800">460800</option>
+                            <option value="921600">921600</option>
+                        </select>
+                        <button class="serial-ctrl-btn" id="serial-connect-btn" onclick="serialToggle()">Connect</button>
+                        <button class="serial-ctrl-btn" onclick="serialReset()">Reset</button>
+                        <button class="serial-ctrl-btn" onclick="serialClear()">Clear</button>
                     </div>
                 </div>
-                <div class="serial-output" id="serial-output">Waiting for connection...</div>
+                <div class="serial-output" id="serial-output">Click "Connect" to open a serial port...</div>
                 <div class="serial-input-bar">
                     <input type="text" id="serial-input" placeholder="Type a message and press Enter..." onkeydown="if(event.key==='Enter')serialSend()">
                     <button onclick="serialSend()">Send</button>
@@ -809,52 +902,249 @@
     </div>
 </footer>
 
-<script>
-/* ─── Scroll Reveal ─── */
-const observer = new IntersectionObserver((entries) => {
-    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
-}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
-document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+<!-- esptool-js (loaded as ES module) -->
+<script type="module">
+import { ESPLoader, Transport } from "https://unpkg.com/esptool-js/bundle.js";
 
-/* ─── Web Serial Terminal ─── */
-let port = null;
-let reader = null;
-let writer = null;
-let keepReading = false;
+const FIRMWARE_BASE = 'firmware/';
+const MANIFEST_URL = FIRMWARE_BASE + 'manifest.json';
 
-const output = document.getElementById('serial-output');
-const input = document.getElementById('serial-input');
-const connectBtn = document.getElementById('serial-connect-btn');
+const flashBtn = document.getElementById('flash-btn');
+const flashEraseBtn = document.getElementById('flash-erase-btn');
+const flashLog = document.getElementById('flash-log');
+const flashProgress = document.getElementById('flash-progress');
+const flashProgressFill = document.getElementById('flash-progress-fill');
+const flashProgressText = document.getElementById('flash-progress-text');
 
-function serialLog(text) {
-    output.textContent += text;
-    output.scrollTop = output.scrollHeight;
+let flashTransport = null;
+let flashLoader = null;
+
+const espTerminal = {
+    clean() { flashLog.textContent = ''; },
+    writeLine(data) {
+        flashLog.textContent += data + '\n';
+        flashLog.scrollTop = flashLog.scrollHeight;
+    },
+    write(data) {
+        flashLog.textContent += data;
+        flashLog.scrollTop = flashLog.scrollHeight;
+    }
+};
+
+function showLog() { flashLog.style.display = 'block'; }
+function showProgress(pct, text) {
+    flashProgress.style.display = 'block';
+    flashProgressFill.style.width = pct + '%';
+    flashProgressText.textContent = text || (pct + '%');
+}
+function hideProgress() { flashProgress.style.display = 'none'; }
+
+async function cleanupFlash() {
+    try {
+        if (flashTransport) { await flashTransport.disconnect(); }
+    } catch (e) { /* ignore */ }
+    flashTransport = null;
+    flashLoader = null;
 }
 
-async function serialToggle() {
-    if (port) {
-        await serialDisconnect();
+/* ── Flash Firmware ── */
+window.flashFirmware = async function() {
+    flashBtn.disabled = true;
+    flashBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Connecting...';
+    showLog();
+    hideProgress();
+    espTerminal.clean();
+
+    try {
+        /* 1. Request serial port */
+        const device = await navigator.serial.requestPort({});
+        flashTransport = new Transport(device, true);
+
+        /* 2. Connect and detect chip */
+        const baudrate = parseInt(document.getElementById('flash-baudrate').value);
+        flashLoader = new ESPLoader({
+            transport: flashTransport,
+            baudrate: baudrate,
+            terminal: espTerminal,
+        });
+
+        flashBtn.innerHTML = 'Detecting chip...';
+        const chip = await flashLoader.main();
+        espTerminal.writeLine('Detected: ' + chip);
+
+        /* 3. Fetch firmware manifest */
+        flashBtn.innerHTML = 'Downloading firmware...';
+        espTerminal.writeLine('Fetching firmware manifest...');
+
+        let manifest;
+        try {
+            const resp = await fetch(MANIFEST_URL);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            manifest = await resp.json();
+        } catch (e) {
+            throw new Error(
+                'Firmware not available yet. CI has not built it.\n' +
+                'Build locally: make esp32s3 && make flash-esp32s3'
+            );
+        }
+
+        /* 4. Find matching build for detected chip */
+        const chipUpper = chip.toUpperCase().replace(/-/g, '');
+        const build = manifest.builds.find(function(b) {
+            return chipUpper.includes(b.chipFamily.toUpperCase().replace(/-/g, ''));
+        });
+        if (!build) {
+            throw new Error('No firmware for ' + chip + '. Available: ' +
+                manifest.builds.map(function(b) { return b.chipFamily; }).join(', '));
+        }
+
+        /* 5. Download firmware parts */
+        const fileArray = [];
+        for (const part of build.parts) {
+            espTerminal.writeLine('Downloading ' + part.path + '...');
+            const partResp = await fetch(FIRMWARE_BASE + part.path);
+            if (!partResp.ok) throw new Error('Failed to download ' + part.path);
+            const data = new Uint8Array(await partResp.arrayBuffer());
+            fileArray.push({ data: data, address: part.offset });
+            espTerminal.writeLine('  ' + part.path + ': ' + data.length + ' bytes @ 0x' + part.offset.toString(16));
+        }
+
+        /* 6. Flash */
+        flashBtn.innerHTML = 'Flashing...';
+        showProgress(0, 'Starting...');
+
+        let totalParts = fileArray.length;
+        let partsDone = 0;
+
+        await flashLoader.writeFlash({
+            fileArray: fileArray,
+            flashSize: 'keep',
+            flashMode: 'keep',
+            flashFreq: 'keep',
+            eraseAll: false,
+            compress: true,
+            reportProgress: function(fileIndex, written, total) {
+                const filePct = Math.round((written / total) * 100);
+                const overallPct = Math.round(((fileIndex + written / total) / totalParts) * 100);
+                showProgress(overallPct, 'Part ' + (fileIndex + 1) + '/' + totalParts + ': ' + filePct + '%');
+                if (written >= total) partsDone = fileIndex + 1;
+            },
+            calculateMD5Hash: function(image) {
+                const latin1 = Array.from(image, function(b) {
+                    return String.fromCharCode(b);
+                }).join('');
+                return CryptoJS.MD5(CryptoJS.enc.Latin1.parse(latin1)).toString();
+            },
+        });
+
+        /* 7. Hard reset */
+        espTerminal.writeLine('\nFlash complete! Resetting device...');
+        showProgress(100, 'Done!');
+        await flashLoader.after();
+
+        espTerminal.writeLine('Device is running. Open Serial Monitor to interact.\n');
+
+    } catch (e) {
+        if (e.name !== 'NotFoundError') {
+            espTerminal.writeLine('\n[Error] ' + e.message);
+        }
+    } finally {
+        await cleanupFlash();
+        flashBtn.disabled = false;
+        flashBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Install RT-Claw';
+    }
+};
+
+/* ── Erase Flash ── */
+window.eraseFlash = async function() {
+    flashEraseBtn.disabled = true;
+    showLog();
+    espTerminal.clean();
+
+    try {
+        const device = await navigator.serial.requestPort({});
+        flashTransport = new Transport(device, true);
+
+        const baudrate = parseInt(document.getElementById('flash-baudrate').value);
+        flashLoader = new ESPLoader({
+            transport: flashTransport,
+            baudrate: baudrate,
+            terminal: espTerminal,
+        });
+
+        await flashLoader.main();
+        espTerminal.writeLine('Erasing entire flash...');
+        await flashLoader.eraseFlash();
+        espTerminal.writeLine('Erase complete!');
+    } catch (e) {
+        if (e.name !== 'NotFoundError') {
+            espTerminal.writeLine('[Error] ' + e.message);
+        }
+    } finally {
+        await cleanupFlash();
+        flashEraseBtn.disabled = false;
+    }
+};
+</script>
+
+<script>
+/* ── Scroll Reveal ── */
+var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.reveal').forEach(function(el) { observer.observe(el); });
+
+/* ── Web Serial Detection ── */
+(function() {
+    if (!navigator.serial) {
+        document.getElementById('flash-unsupported').style.display = 'block';
+        document.getElementById('flash-main').style.display = 'none';
     } else {
-        await serialConnect();
+        document.getElementById('flash-erase-btn').style.display = '';
+    }
+})();
+
+/* ── Serial Terminal ── */
+var serialPort = null;
+var serialReader = null;
+var serialWriter = null;
+var serialKeepReading = false;
+
+var serialOutput = document.getElementById('serial-output');
+var serialInput = document.getElementById('serial-input');
+var serialConnectBtn = document.getElementById('serial-connect-btn');
+var serialStatus = document.getElementById('serial-status');
+
+function serialLog(text) {
+    serialOutput.textContent += text;
+    serialOutput.scrollTop = serialOutput.scrollHeight;
+}
+
+function serialToggle() {
+    if (serialPort) {
+        serialDisconnect();
+    } else {
+        serialConnect();
     }
 }
 
 async function serialConnect() {
-    if (!('serial' in navigator)) {
-        serialLog('\n[Error] Web Serial not supported. Use Chrome or Edge.\n');
+    if (!navigator.serial) {
+        serialLog('\n[Error] Web Serial not supported.\n');
         return;
     }
     try {
-        port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 115200 });
-        writer = port.writable.getWriter();
-        connectBtn.textContent = 'Disconnect';
-        connectBtn.classList.add('connected');
-        connectBtn.classList.remove('disconnect');
-        output.textContent = '';
-        serialLog('[Connected] 115200 baud\n');
-        keepReading = true;
-        readLoop();
+        serialPort = await navigator.serial.requestPort({});
+        var baud = parseInt(document.getElementById('serial-baudrate').value);
+        await serialPort.open({ baudRate: baud });
+        serialWriter = serialPort.writable.getWriter();
+        serialConnectBtn.textContent = 'Disconnect';
+        serialConnectBtn.classList.add('active');
+        serialStatus.classList.add('connected');
+        serialOutput.textContent = '';
+        serialLog('[Connected] ' + baud + ' baud\n');
+        serialKeepReading = true;
+        serialReadLoop();
     } catch (e) {
         if (e.name !== 'NotFoundError') {
             serialLog('\n[Error] ' + e.message + '\n');
@@ -862,50 +1152,63 @@ async function serialConnect() {
     }
 }
 
-async function readLoop() {
-    while (port && port.readable && keepReading) {
-        reader = port.readable.getReader();
+async function serialReadLoop() {
+    while (serialPort && serialPort.readable && serialKeepReading) {
+        serialReader = serialPort.readable.getReader();
         try {
             while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                serialLog(new TextDecoder().decode(value));
+                var result = await serialReader.read();
+                if (result.done) break;
+                serialLog(new TextDecoder().decode(result.value));
             }
         } catch (e) {
-            if (keepReading) serialLog('\n[Read error] ' + e.message + '\n');
+            if (serialKeepReading) serialLog('\n[Read error] ' + e.message + '\n');
         } finally {
-            reader.releaseLock();
-            reader = null;
+            serialReader.releaseLock();
+            serialReader = null;
         }
     }
 }
 
 async function serialDisconnect() {
-    keepReading = false;
+    serialKeepReading = false;
     try {
-        if (reader) { await reader.cancel(); reader.releaseLock(); reader = null; }
-        if (writer) { writer.releaseLock(); writer = null; }
-        if (port) { await port.close(); port = null; }
+        if (serialReader) { await serialReader.cancel(); serialReader.releaseLock(); serialReader = null; }
+        if (serialWriter) { serialWriter.releaseLock(); serialWriter = null; }
+        if (serialPort) { await serialPort.close(); serialPort = null; }
     } catch (e) { /* ignore */ }
-    connectBtn.textContent = 'Connect';
-    connectBtn.classList.remove('connected');
+    serialConnectBtn.textContent = 'Connect';
+    serialConnectBtn.classList.remove('active');
+    serialStatus.classList.remove('connected');
     serialLog('\n[Disconnected]\n');
 }
 
 async function serialSend() {
-    if (!writer) return;
-    const text = input.value;
+    if (!serialWriter) return;
+    var text = serialInput.value;
     if (!text) return;
     try {
-        await writer.write(new TextEncoder().encode(text + '\n'));
-        input.value = '';
+        await serialWriter.write(new TextEncoder().encode(text + '\n'));
+        serialInput.value = '';
     } catch (e) {
         serialLog('\n[Send error] ' + e.message + '\n');
     }
 }
 
+async function serialReset() {
+    if (!serialPort) return;
+    try {
+        await serialPort.setSignals({ dataTerminalReady: false });
+        await new Promise(function(r) { setTimeout(r, 100); });
+        await serialPort.setSignals({ dataTerminalReady: true });
+        serialLog('\n[Reset] DTR toggled\n');
+    } catch (e) {
+        serialLog('\n[Reset error] ' + e.message + '\n');
+    }
+}
+
 function serialClear() {
-    output.textContent = port ? '' : 'Waiting for connection...';
+    serialOutput.textContent = serialPort ? '' : 'Click "Connect" to open a serial port...';
 }
 </script>
 
