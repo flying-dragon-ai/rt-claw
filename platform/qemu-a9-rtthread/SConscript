@@ -5,19 +5,33 @@ cwd = GetCurrentDir()
 project_root = os.path.normpath(os.path.join(cwd, '..', '..'))
 objs = []
 
-# Local subdirectories (drivers, applications)
+# --- Local subdirectories (drivers, applications) ---
 for d in os.listdir(cwd):
     path = os.path.join(cwd, d)
     if os.path.isfile(os.path.join(path, 'SConscript')):
         objs = objs + SConscript(os.path.join(d, 'SConscript'))
 
-# Shared OSAL (RT-Thread implementation)
-objs = objs + SConscript(os.path.join(project_root, 'osal', 'rtthread', 'SConscript'))
+# rt-claw headers (for applications/main.c and OSAL impl)
+claw_inc = [
+    os.path.join(project_root, 'osal', 'include'),
+    os.path.join(project_root, 'src'),
+    os.path.join(project_root, 'src', 'core'),
+    os.path.join(project_root, 'src', 'services', 'ai'),
+    os.path.join(project_root, 'src', 'services', 'net'),
+    os.path.join(project_root, 'src', 'services', 'swarm'),
+    os.path.join(project_root, 'src', 'services', 'im'),
+    os.path.join(project_root, 'src', 'tools'),
+    os.path.join(project_root, 'vendor', 'cjson'),
+]
+Env.AppendUnique(CPPPATH=[os.path.abspath(p) for p in claw_inc])
 
-# Shared rt-claw core and services
-objs = objs + SConscript(os.path.join(project_root, 'src', 'SConscript'))
-
-# cJSON library
-objs = objs + SConscript(os.path.join(project_root, 'vendor', 'cjson', 'SConscript'))
+# Link pre-built libraries from Meson (build/qemu-a9/)
+build_dir = os.path.join(project_root, 'build', 'qemu-a9')
+Env.AppendUnique(LIBS=['rtclaw', 'osal', 'cjson'])
+Env.AppendUnique(LIBPATH=[
+    os.path.join(build_dir, 'src'),
+    os.path.join(build_dir, 'osal'),
+    os.path.join(build_dir, 'vendor', 'cjson'),
+])
 
 Return('objs')
