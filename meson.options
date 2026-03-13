@@ -1,0 +1,24 @@
+option('osal', type: 'combo',
+    choices: ['rtthread', 'freertos', 'none'],
+    value: 'none',
+    description: 'OSAL backend (none = library only, no OSAL compiled)')
+
+option('swarm', type: 'boolean', value: true,
+    description: 'Enable swarm service')
+option('sched', type: 'boolean', value: true,
+    description: 'Enable scheduler')
+option('skill', type: 'boolean', value: true,
+    description: 'Enable AI skill framework')
+option('tool_gpio', type: 'boolean', value: true,
+    description: 'Enable GPIO tool')
+option('tool_system', type: 'boolean', value: true,
+    description: 'Enable system info tool')
+option('tool_sched', type: 'boolean', value: true,
+    description: 'Enable scheduler tool')
+
+option('ai_api_key', type: 'string', value: '',
+    description: 'AI API key (overrides CONFIG_CLAW_AI_API_KEY)')
+option('ai_api_url', type: 'string', value: '',
+    description: 'AI API URL (overrides CONFIG_CLAW_AI_API_URL)')
+option('ai_model', type: 'string', value: '',
+    description: 'AI model name (overrides CONFIG_CLAW_AI_MODEL)')

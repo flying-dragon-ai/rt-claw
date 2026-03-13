@@ -1,4 +1,4 @@
-# Build output
+# Build output (unified: build/<platform>/)
 build/
 *.o
 *.obj
@@ -49,6 +49,7 @@ packages/
 # Auto-generated
 **/automac.h
 sd.bin
+platform/esp32c3/cross.ini
 
 # Claude Code
 .claude/
