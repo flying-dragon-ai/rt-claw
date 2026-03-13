@@ -647,7 +647,10 @@ static void ai_worker_thread(void *arg)
             " All outputs (including scheduled task results)"
             " will be delivered to this Feishu conversation."
             " Do NOT mention LCD or serial console unless"
-            " the user explicitly asks.");
+            " the user explicitly asks."
+            " IMPORTANT: Feishu does NOT render markdown tables."
+            " Never use table syntax (| --- |). Use bullet lists"
+            " or structured text instead.");
         sched_set_reply_context(sched_reply_to_feishu, chat_id);
 
         CLAW_LOGI(TAG, "[%lu ms] ... ai_chat start: \"%s\"",

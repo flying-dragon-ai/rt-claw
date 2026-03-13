@@ -45,7 +45,7 @@
 
 static claw_mutex_t s_api_lock;
 static ai_status_cb_t s_status_cb;
-static char s_channel_hint[128];
+static char s_channel_hint[512];
 
 static inline void notify_status(int st, const char *detail)
 {
