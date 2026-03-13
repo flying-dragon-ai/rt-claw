@@ -79,11 +79,15 @@ scenario without writing, compiling, or flashing embedded code again.
 
 | Platform | Target | RTOS | Build | Status |
 |----------|--------|------|-------|--------|
-| ESP32-C3 | QEMU (Espressif fork) | ESP-IDF + FreeRTOS | Meson + CMake | AI verified |
-| ESP32-S3 | QEMU (Espressif fork) | ESP-IDF + FreeRTOS | Meson + CMake | AI verified |
+| ESP32-C3 | QEMU (Espressif fork) | ESP-IDF + FreeRTOS | Meson + CMake | AI + Ethernet verified |
+| ESP32-S3 | QEMU (Espressif fork) | ESP-IDF + FreeRTOS | Meson + CMake | AI + Ethernet verified |
 | ESP32-C3 | Real hardware | ESP-IDF + FreeRTOS | Meson + CMake | Untested |
 | ESP32-S3 | Real hardware | ESP-IDF + FreeRTOS | Meson + CMake | Untested |
-| QEMU vexpress-a9 | QEMU | RT-Thread | Meson + SCons | AI verified |
+| QEMU vexpress-a9 | QEMU | RT-Thread | Meson + SCons | Boot + Ethernet verified |
+
+> Note: upstream STM32 QEMU boards were evaluated on QEMU 10.2.x but are not
+> listed here yet because Ethernet is still unimplemented there, so rt-claw
+> cannot provide QEMU networking on those machines today.
 
 ## Quick Start
 
