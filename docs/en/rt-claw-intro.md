@@ -43,7 +43,7 @@ Setting a scheduled task is just one sentence away:
 
 ```bash
 # 1. One-line toolchain setup
-./tools/setup-esp-env.sh
+./scripts/setup-esp-env.sh
 
 # 2. Pick a config preset
 cd platform/esp32c3

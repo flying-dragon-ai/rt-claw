@@ -41,7 +41,7 @@ Signed-off-by: Your Name <your@email.com>
 | `platform` | 平台特定变更（`platform/`）               |
 | `build`    | 构建系统（SCons、CMake、脚本）            |
 | `docs`     | 文档变更                                  |
-| `tools`    | 工具脚本（`tools/`、`scripts/`）          |
+| `tools`    | 工具脚本（`scripts/`）                    |
 
 ### 示例
 

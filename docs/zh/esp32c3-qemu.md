@@ -37,7 +37,7 @@ sudo pacman -S --needed \
 
 ```bash
 # 一次性安装（克隆 ESP-IDF + 安装工具链 + QEMU）
-./tools/setup-esp-env.sh
+./scripts/setup-esp-env.sh
 
 # 激活环境（每个终端会话）
 source $HOME/esp/esp-idf/export.sh

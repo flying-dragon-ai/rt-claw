@@ -17,7 +17,7 @@ Use `scripts/check-patch.sh` to verify compliance before submitting.
 | `osal/`     | Yes     | OS abstraction layer                |
 | `platform/` | No      | Platform-specific BSP/build files   |
 | `vendor/`   | No      | Third-party RTOS source code        |
-| `tools/`    | No      | Build and launch scripts            |
+| `scripts/`  | No      | Build and launch scripts            |
 
 ## Whitespace and Indentation
 

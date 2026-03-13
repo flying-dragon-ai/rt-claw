@@ -41,7 +41,7 @@ Signed-off-by: Your Name <your@email.com>
 | `platform` | Platform-specific changes (`platform/`)   |
 | `build`    | Build system (SCons, CMake, scripts)      |
 | `docs`     | Documentation changes                     |
-| `tools`    | Tool scripts (`tools/`, `scripts/`)       |
+| `tools`    | Tool scripts (`scripts/`)                 |
 
 ### Examples
 

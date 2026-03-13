@@ -107,7 +107,7 @@ sudo pacman -S --needed libgcrypt glib2 pixman sdl2 libslirp \
 
 ```bash
 # 一键安装（克隆 ESP-IDF v5.4，安装工具链 + QEMU）
-./tools/setup-esp-env.sh
+./scripts/setup-esp-env.sh
 ```
 
 **3. 选择配置预设**
@@ -183,7 +183,7 @@ meson compile -C build/vexpress-a9-qemu
 scons -C platform/vexpress-a9-qemu -j$(nproc)
 
 # 启动 API 代理（RT-Thread 无 TLS，代理转发 HTTP→HTTPS）
-python3 tools/api-proxy.py https://api.anthropic.com &
+python3 scripts/api-proxy.py https://api.anthropic.com &
 
 # 运行
 make run-vexpress-a9-qemu
@@ -193,35 +193,40 @@ make run-vexpress-a9-qemu
 
 ```
 rt-claw/
-├── meson.build                  # Meson 构建定义（交叉编译 src + osal）
-├── meson_options.txt                # Meson 构建选项（OSAL 后端、功能开关、AI 配置）
+├── meson.build                  # Meson 构建定义（交叉编译 claw + osal）
+├── meson_options.txt            # Meson 构建选项（OSAL 后端、功能开关、AI 配置）
 ├── Makefile                     # 统一构建入口（make esp32c3-qemu / make vexpress-a9-qemu）
+├── include/                     # 统一公共头文件
+│   ├── claw_os.h               #   OSAL API
+│   ├── claw_net.h              #   网络抽象层
+│   ├── claw_config.h           #   项目配置
+│   ├── core/                   #   网关、调度器、服务接口
+│   ├── services/               #   AI、网络、蜂群、IM 服务头文件
+│   └── tools/                  #   Tool Use 框架头文件
 ├── osal/                        # 操作系统抽象层
-│   ├── include/claw_os.h       #   统一 RTOS API
 │   ├── freertos/                #   FreeRTOS 实现
 │   └── rtthread/                #   RT-Thread 实现
-├── src/                         # 平台无关核心代码
-│   ├── claw_init.*              #   启动入口
-│   ├── claw_config.h            #   项目配置
-│   ├── core/gateway.*           #   消息路由
-│   ├── services/ai/             #   LLM 对话引擎（Claude API）
-│   ├── services/net/            #   网络服务
-│   ├── services/swarm/          #   蜂群智能
-│   └── tools/                   #   Tool Use 框架（GPIO、系统信息、LCD）
+├── claw/                        # 平台无关核心代码
+│   ├── claw_init.c             #   启动入口
+│   ├── core/                   #   网关、调度器
+│   ├── services/ai/            #   LLM 对话引擎（Claude API）
+│   ├── services/net/           #   网络服务
+│   ├── services/swarm/         #   蜂群智能
+│   └── tools/                  #   Tool Use 框架（GPIO、系统信息、LCD）
 ├── platform/
-│   ├── esp32c3-qemu/            # ESP32-C3 QEMU（ESP-IDF, Meson + CMake）
-│   └── vexpress-a9-qemu/       # RT-Thread BSP（Meson + SCons）
+│   ├── esp32c3-qemu/           # ESP32-C3 QEMU（ESP-IDF, Meson + CMake）
+│   ├── esp32s3-qemu/           # ESP32-S3 QEMU（ESP-IDF, Meson + CMake）
+│   └── vexpress-a9-qemu/      # RT-Thread BSP（Meson + SCons）
 ├── vendor/
-│   ├── freertos/                # FreeRTOS-Kernel（子模块）
-│   └── rt-thread/               # RT-Thread（子模块）
+│   ├── freertos/               # FreeRTOS-Kernel（子模块）
+│   └── rt-thread/              # RT-Thread（子模块）
 ├── docs/
-│   ├── en/                      # 英文文档
-│   └── zh/                      # 中文文档
-├── scripts/
-│   ├── gen-esp32c3-cross.py    # 从 ESP-IDF 自动生成 Meson 交叉编译文件
-│   └── ...
-└── tools/
-    ├── api-proxy.py             # HTTP→HTTPS 代理（RT-Thread QEMU 无 TLS）
+│   ├── en/                     # 英文文档
+│   └── zh/                     # 中文文档
+└── scripts/
+    ├── api-proxy.py            # HTTP→HTTPS 代理（RT-Thread QEMU 无 TLS）
+    ├── setup-esp-env.sh        # 安装 ESP-IDF + QEMU
+    ├── gen-esp32c3-cross.py    # 从 ESP-IDF 自动生成 Meson 交叉编译文件
     └── ...
 ```
 

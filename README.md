@@ -110,7 +110,7 @@ sudo pacman -S --needed libgcrypt glib2 pixman sdl2 libslirp \
 
 ```bash
 # One-line setup (clones ESP-IDF v5.4, installs toolchain + QEMU)
-./tools/setup-esp-env.sh
+./scripts/setup-esp-env.sh
 ```
 
 **3. Choose a configuration preset**
@@ -188,7 +188,7 @@ meson compile -C build/vexpress-a9-qemu
 scons -C platform/vexpress-a9-qemu -j$(nproc)
 
 # Start API proxy (RT-Thread has no TLS, proxy forwards HTTP->HTTPS)
-python3 tools/api-proxy.py https://api.anthropic.com &
+python3 scripts/api-proxy.py https://api.anthropic.com &
 
 # Run
 make run-vexpress-a9-qemu
@@ -198,35 +198,40 @@ make run-vexpress-a9-qemu
 
 ```
 rt-claw/
-├── meson.build                  # Meson build definition (cross-compiles src + osal)
-├── meson_options.txt                # Meson build options (osal backend, features, AI config)
+├── meson.build                  # Meson build definition (cross-compiles claw + osal)
+├── meson_options.txt            # Meson build options (osal backend, features, AI config)
 ├── Makefile                     # Unified build entry (make esp32c3-qemu / make vexpress-a9-qemu)
+├── include/                     # Unified public headers
+│   ├── claw_os.h               #   OSAL API
+│   ├── claw_net.h              #   Network abstraction
+│   ├── claw_config.h           #   Project configuration
+│   ├── core/                   #   Gateway, scheduler, service interface
+│   ├── services/               #   AI, net, swarm, IM service headers
+│   └── tools/                  #   Tool Use framework headers
 ├── osal/                        # OS Abstraction Layer
-│   ├── include/claw_os.h       #   Unified RTOS API
 │   ├── freertos/                #   FreeRTOS implementation
 │   └── rtthread/                #   RT-Thread implementation
-├── src/                         # Platform-independent core
-│   ├── claw_init.*              #   Boot entry point
-│   ├── claw_config.h            #   Project configuration
-│   ├── core/gateway.*           #   Message routing
-│   ├── services/ai/             #   LLM chat engine (Claude API)
-│   ├── services/net/            #   Network service
-│   ├── services/swarm/          #   Swarm intelligence
-│   └── tools/                   #   Tool Use framework (GPIO, system, LCD)
+├── claw/                        # Platform-independent core
+│   ├── claw_init.c             #   Boot entry point
+│   ├── core/                   #   Gateway, scheduler
+│   ├── services/ai/            #   LLM chat engine (Claude API)
+│   ├── services/net/           #   Network service
+│   ├── services/swarm/         #   Swarm intelligence
+│   └── tools/                  #   Tool Use framework (GPIO, system, LCD)
 ├── platform/
-│   ├── esp32c3-qemu/            # ESP32-C3 QEMU (ESP-IDF, Meson + CMake)
-│   └── vexpress-a9-qemu/       # RT-Thread BSP (Meson + SCons)
+│   ├── esp32c3-qemu/           # ESP32-C3 QEMU (ESP-IDF, Meson + CMake)
+│   ├── esp32s3-qemu/           # ESP32-S3 QEMU (ESP-IDF, Meson + CMake)
+│   └── vexpress-a9-qemu/      # RT-Thread BSP (Meson + SCons)
 ├── vendor/
-│   ├── freertos/                # FreeRTOS-Kernel (submodule)
-│   └── rt-thread/               # RT-Thread (submodule)
+│   ├── freertos/               # FreeRTOS-Kernel (submodule)
+│   └── rt-thread/              # RT-Thread (submodule)
 ├── docs/
-│   ├── en/                      # English documentation
-│   └── zh/                      # Chinese documentation
-├── scripts/
-│   ├── gen-esp32c3-cross.py     # Auto-generate Meson cross-file from ESP-IDF
-│   └── ...
-└── tools/
-    ├── api-proxy.py             # HTTP→HTTPS proxy for QEMU (no TLS on RT-Thread)
+│   ├── en/                     # English documentation
+│   └── zh/                     # Chinese documentation
+└── scripts/
+    ├── api-proxy.py            # HTTP→HTTPS proxy for QEMU (no TLS on RT-Thread)
+    ├── setup-esp-env.sh        # Install ESP-IDF + QEMU
+    ├── gen-esp32c3-cross.py    # Auto-generate Meson cross-file from ESP-IDF
     └── ...
 ```
 

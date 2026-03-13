@@ -113,4 +113,4 @@ No unit test framework yet. Verify changes by:
 | `platform/vexpress-a9-qemu/` | RT-Thread BSP + Meson cross-file |
 | `scripts/gen-esp32c3-cross.py` | Generate ESP32-C3 Meson cross-file |
 | `scripts/gen-esp32s3-cross.py` | Generate ESP32-S3 Meson cross-file |
-| `tools/api-proxy.py` | HTTP→HTTPS proxy for QEMU without TLS |
+| `scripts/api-proxy.py` | HTTP→HTTPS proxy for QEMU without TLS |

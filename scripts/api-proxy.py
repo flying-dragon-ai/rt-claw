@@ -6,8 +6,8 @@ ESP32 connects to http://10.0.2.2:8888/v1/messages (plain HTTP, no TLS)
 This proxy forwards to https://api.hiyo.top/v1/messages (TLS 1.3)
 
 Usage:
-    python3 tools/api-proxy.py                          # default target
-    python3 tools/api-proxy.py https://api.hiyo.top     # custom target
+    python3 scripts/api-proxy.py                          # default target
+    python3 scripts/api-proxy.py https://api.hiyo.top     # custom target
 """
 
 import http.server

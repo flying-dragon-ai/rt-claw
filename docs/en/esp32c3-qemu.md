@@ -37,7 +37,7 @@ sudo pacman -S --needed \
 
 ```bash
 # One-time setup (clones ESP-IDF + installs toolchain + QEMU)
-./tools/setup-esp-env.sh
+./scripts/setup-esp-env.sh
 
 # Activate environment (every terminal session)
 source $HOME/esp/esp-idf/export.sh
