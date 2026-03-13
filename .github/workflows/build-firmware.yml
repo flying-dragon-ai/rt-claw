@@ -1,0 +1,120 @@
+name: Build ESP32-S3 Firmware
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'claw/**'
+      - 'osal/**'
+      - 'include/**'
+      - 'platform/esp32s3/**'
+      - 'meson.build'
+      - 'meson_options.txt'
+      - '.github/workflows/build-firmware.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: firmware
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git wget flex bison gperf python3 python3-venv \
+            cmake ninja-build ccache libffi-dev libssl-dev dfu-util \
+            libusb-1.0-0 meson
+
+      - name: Cache ESP-IDF
+        uses: actions/cache@v4
+        id: cache-idf
+        with:
+          path: ~/esp
+          key: esp-idf-v5.4-${{ runner.os }}
+
+      - name: Install ESP-IDF
+        if: steps.cache-idf.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/esp
+          cd ~/esp
+          git clone -b v5.4 --depth 1 --recursive https://github.com/espressif/esp-idf.git
+          cd esp-idf
+          ./install.sh esp32s3
+
+      - name: Build ESP32-S3 firmware
+        run: |
+          source ~/esp/esp-idf/export.sh
+          make esp32s3
+
+      - name: Prepare firmware artifacts
+        run: |
+          mkdir -p firmware-out
+          BUILD_DIR=build/esp32s3
+
+          cp ${BUILD_DIR}/bootloader/bootloader.bin firmware-out/bootloader.bin
+          cp ${BUILD_DIR}/partition_table/partition-table.bin firmware-out/partition-table.bin
+          cp ${BUILD_DIR}/rt-claw.bin firmware-out/firmware.bin
+
+          # Generate manifest for esp-web-tools
+          cat > firmware-out/manifest.json << 'MANIFEST'
+          {
+              "name": "RT-Claw",
+              "version": "${{ github.sha }}",
+              "new_install_prompt_erase": true,
+              "builds": [
+                  {
+                      "chipFamily": "ESP32-S3",
+                      "parts": [
+                          { "path": "bootloader.bin", "offset": 0 },
+                          { "path": "partition-table.bin", "offset": 32768 },
+                          { "path": "firmware.bin", "offset": 65536 }
+                      ]
+                  }
+              ]
+          }
+          MANIFEST
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32s3-firmware
+          path: firmware-out/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download firmware artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: esp32s3-firmware
+          path: website/firmware/
+
+      - name: Copy images to website
+        run: cp -r images/ website/img/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
