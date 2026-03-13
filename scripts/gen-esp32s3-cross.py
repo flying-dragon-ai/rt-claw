@@ -4,10 +4,15 @@
 # Generate Meson cross-file for ESP32-S3 from ESP-IDF build config.
 #
 # Prerequisites:
-#   cd platform/esp32s3-qemu && idf.py set-target esp32s3
+#   cd platform/<platform> && idf.py set-target esp32s3
 #
 # Usage:
-#   python3 scripts/gen-esp32s3-cross.py
+#   python3 scripts/gen-esp32s3-cross.py [platform-dir]
+#
+# platform-dir defaults to "esp32s3-qemu".
+# Examples:
+#   python3 scripts/gen-esp32s3-cross.py              # QEMU
+#   python3 scripts/gen-esp32s3-cross.py esp32s3       # real hardware
 
 import json
 import os
@@ -15,9 +20,12 @@ import re
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ESP_BUILD_DIR = os.path.join(PROJECT_ROOT, 'platform', 'esp32s3-qemu', 'build')
+
+PLATFORM_DIR = sys.argv[1] if len(sys.argv) > 1 else 'esp32s3-qemu'
+
+ESP_BUILD_DIR = os.path.join(PROJECT_ROOT, 'platform', PLATFORM_DIR, 'build')
 CC_JSON = os.path.join(ESP_BUILD_DIR, 'compile_commands.json')
-CROSS_INI = os.path.join(PROJECT_ROOT, 'platform', 'esp32s3-qemu', 'cross.ini')
+CROSS_INI = os.path.join(PROJECT_ROOT, 'platform', PLATFORM_DIR, 'cross.ini')
 SDKCONFIG_H = os.path.join(ESP_BUILD_DIR, 'config', 'sdkconfig.h')
 
 
@@ -25,7 +33,7 @@ def main():
     if not os.path.exists(CC_JSON):
         print(f'Error: {CC_JSON} not found.', file=sys.stderr)
         print('Run first:', file=sys.stderr)
-        print('  cd platform/esp32s3-qemu && idf.py set-target esp32s3',
+        print(f'  cd platform/{PLATFORM_DIR} && idf.py set-target esp32s3',
               file=sys.stderr)
         return 1
 

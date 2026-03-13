@@ -27,7 +27,6 @@ sdkconfig.old
 managed_components/
 dependencies.lock
 .cache/
-platform/*/sdkconfig.defaults
 
 # IDE
 .vscode/
@@ -53,6 +52,7 @@ packages/
 sd.bin
 platform/esp32c3-qemu/cross.ini
 platform/esp32s3-qemu/cross.ini
+platform/esp32s3/cross.ini
 
 # Claude Code
 .claude/

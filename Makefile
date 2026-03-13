@@ -15,15 +15,22 @@ GRAPHICS ?= 0
 help:
 	@echo "rt-claw build system"
 	@echo ""
-	@echo "Build:"
+	@echo "Build (QEMU):"
 	@echo "  make vexpress-a9-qemu      Build for QEMU vexpress-a9 (RT-Thread)"
 	@echo "  make esp32c3-qemu          Build for ESP32-C3 QEMU (ESP-IDF)"
 	@echo "  make esp32s3-qemu          Build for ESP32-S3 QEMU (ESP-IDF)"
 	@echo ""
-	@echo "Run (build + launch QEMU):"
+	@echo "Build (real hardware):"
+	@echo "  make esp32s3               Build for ESP32-S3 real hardware"
+	@echo ""
+	@echo "Run QEMU (build + launch):"
 	@echo "  make run-vexpress-a9-qemu"
 	@echo "  make run-esp32c3-qemu"
 	@echo "  make run-esp32s3-qemu"
+	@echo ""
+	@echo "Flash + monitor (real hardware):"
+	@echo "  make flash-esp32s3         Flash firmware to ESP32-S3"
+	@echo "  make monitor-esp32s3       Serial monitor (Ctrl+] to exit)"
 	@echo ""
 	@echo "Run options (pass as variables):"
 	@echo "  make run-esp32c3-qemu GDB=1        Debug mode (GDB port 1234)"
@@ -158,6 +165,42 @@ run-esp32s3-qemu: esp32s3-qemu
 		-drive file=$(ESP_S3_PLATFORM)/build/flash_image.bin,if=mtd,format=raw \
 		-nic user,model=open_eth \
 		$(if $(filter 1,$(GDB)),-S -s)
+
+# --- ESP32-S3 real hardware (ESP-IDF + WiFi) ---
+# Prerequisite: source $$HOME/esp/esp-idf/export.sh
+MESON_BUILDDIR_S3_HW := $(BUILD_DIR)/esp32s3
+CROSS_FILE_S3_HW     := platform/esp32s3/cross.ini
+ESP_S3_HW_PLATFORM   := platform/esp32s3
+
+.PHONY: esp32s3
+esp32s3:
+	@if [ ! -f $(ESP_S3_HW_PLATFORM)/sdkconfig ]; then \
+		rm -rf $(ESP_S3_HW_PLATFORM)/build; \
+		cd $(ESP_S3_HW_PLATFORM) && idf.py set-target esp32s3; \
+	fi
+	@if [ ! -f $(ESP_S3_HW_PLATFORM)/build/compile_commands.json ]; then \
+		cd $(ESP_S3_HW_PLATFORM) && idf.py reconfigure; \
+	fi
+	python3 scripts/gen-esp32s3-cross.py esp32s3
+	@if [ ! -f $(MESON_BUILDDIR_S3_HW)/build.ninja ]; then \
+		meson setup $(MESON_BUILDDIR_S3_HW) --cross-file $(CROSS_FILE_S3_HW); \
+	fi
+	meson compile -C $(MESON_BUILDDIR_S3_HW)
+	cd $(ESP_S3_HW_PLATFORM) && idf.py reconfigure && idf.py build
+	@echo "Output: $(ESP_S3_HW_PLATFORM)/build/rt-claw.bin"
+
+.PHONY: flash-esp32s3
+flash-esp32s3: esp32s3
+	cd $(ESP_S3_HW_PLATFORM) && idf.py flash
+
+.PHONY: monitor-esp32s3
+monitor-esp32s3:
+	cd $(ESP_S3_HW_PLATFORM) && idf.py monitor
+
+.PHONY: clean-esp32s3
+clean-esp32s3:
+	rm -rf $(BUILD_DIR)/esp32s3
+	rm -f platform/esp32s3/cross.ini
 
 # --- Clean ---
 .PHONY: clean
