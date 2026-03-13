@@ -120,7 +120,10 @@ static void heartbeat_ai_thread(void *arg)
 out:
     claw_free(prompt);
     claw_free(reply);
+
+    claw_mutex_lock(s_lock, CLAW_WAIT_FOREVER);
     s_busy = 0;
+    claw_mutex_unlock(s_lock);
 }
 
 /* Scheduler callback — runs in sched thread, must not block */
@@ -128,22 +131,24 @@ static void heartbeat_tick(void *arg)
 {
     (void)arg;
 
-    if (s_event_count == 0) {
-        return;
-    }
+    claw_mutex_lock(s_lock, CLAW_WAIT_FOREVER);
 
-    if (s_busy) {
-        CLAW_LOGD(TAG, "previous check still running, skip");
+    if (s_event_count == 0 || s_busy) {
+        claw_mutex_unlock(s_lock);
         return;
     }
 
     s_busy = 1;
+    claw_mutex_unlock(s_lock);
+
     claw_thread_t th = claw_thread_create(
         "hb_ai", heartbeat_ai_thread, NULL,
         CLAW_HEARTBEAT_THREAD_STACK, 20);
     if (!th) {
         CLAW_LOGE(TAG, "thread create failed");
+        claw_mutex_lock(s_lock, CLAW_WAIT_FOREVER);
         s_busy = 0;
+        claw_mutex_unlock(s_lock);
     }
 }
 

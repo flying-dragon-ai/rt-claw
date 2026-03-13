@@ -43,7 +43,7 @@ static void sched_thread(void *arg)
             if (!t->active || t->remaining == 0) {
                 continue;
             }
-            if (now < t->next_run_ms) {
+            if ((int32_t)(now - t->next_run_ms) < 0) {
                 continue;
             }
 
