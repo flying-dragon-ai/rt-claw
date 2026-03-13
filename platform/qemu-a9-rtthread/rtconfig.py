@@ -52,7 +52,7 @@ if PLATFORM == 'gcc':
     DEVICE   = ' -march=armv7-a -mtune=cortex-a7 -ftree-vectorize -ffast-math -funwind-tables -fno-strict-aliasing'
 
     CXXFLAGS= DEVICE + CFPFLAGS + ' -Wall -fdiagnostics-color=always'
-    CFLAGS  = DEVICE + CFPFLAGS + ' -Wall -Wno-cpp -std=gnu99 -D_POSIX_SOURCE -fdiagnostics-color=always'
+    CFLAGS  = DEVICE + CFPFLAGS + ' -Wall -Wno-cpp -std=gnu99 -D_POSIX_SOURCE -DCLAW_PLATFORM_RTTHREAD -fdiagnostics-color=always'
     AFLAGS  = DEVICE + ' -c' + AFPFLAGS + ' -x assembler-with-cpp'
     LFLAGS  = DEVICE + ' -Wl,--gc-sections,-Map=rtthread.map,-cref,-u,system_vectors -T '+ LINK_SCRIPT + ' -lsupc++ -lgcc -static'
     CPATH   = ''

@@ -17,4 +17,7 @@ objs = objs + SConscript(os.path.join(project_root, 'osal', 'rtthread', 'SConscr
 # Shared rt-claw core and services
 objs = objs + SConscript(os.path.join(project_root, 'src', 'SConscript'))
 
+# cJSON library
+objs = objs + SConscript(os.path.join(project_root, 'vendor', 'cjson', 'SConscript'))
+
 Return('objs')

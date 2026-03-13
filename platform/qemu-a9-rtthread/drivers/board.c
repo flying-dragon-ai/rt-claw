@@ -61,6 +61,7 @@ rt_region_t init_page_region = {
 
 void rt_hw_board_init(void)
 {
+
 #ifdef RT_USING_SMART
     rt_uint32_t mmutable_p = 0;
     rt_hw_mmu_map_init(&rt_kernel_space, (void*)0xf0000000, 0x10000000, MMUTable, PV_OFFSET);
@@ -88,9 +89,31 @@ void rt_hw_board_init(void)
 
     rt_thread_idle_sethook(idle_wfi);
 
+
 #ifdef RT_USING_SMP
     /* install IPI handle */
     rt_hw_ipi_handler_install(RT_SCHEDULE_IPI, rt_scheduler_ipi_handler);
 #endif
+}
+
+/*
+ * Microsecond busy-wait using ARM Private Timer (Cortex-A9 MPCore).
+ * The private timer is at PERIPHBASE + 0x600, runs at PERIPHCLK/2.
+ * For QEMU vexpress-a9, use a calibrated CPU loop as fallback.
+ */
+void rt_hw_us_delay(rt_uint32_t us)
+{
+    /*
+     * Simple calibrated loop for QEMU.
+     * Each loop iteration is ~4 instructions on ARM.
+     * At 1 GHz emulated CPU, ~250 iterations per us.
+     * We use a conservative estimate; exact timing is not
+     * critical for QEMU.
+     */
+    volatile rt_uint32_t loops = us * 200;
+    while (loops--)
+    {
+        /* empty */
+    }
 }
 

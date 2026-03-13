@@ -12,7 +12,9 @@ CPPPATH = [
     os.path.join(cwd, 'services', 'swarm'),
     os.path.join(cwd, 'services', 'net'),
     os.path.join(cwd, 'services', 'ai'),
+    os.path.join(cwd, 'tools'),
     os.path.join(cwd, '..', 'osal', 'include'),
+    os.path.join(cwd, '..', 'vendor', 'cjson'),
 ]
 group = DefineGroup('RtClaw_Init', src, depend = [''], CPPPATH = CPPPATH)
 objs = objs + group

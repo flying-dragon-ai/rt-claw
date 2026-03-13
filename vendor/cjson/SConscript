@@ -1,0 +1,8 @@
+import os
+from building import *
+
+cwd = GetCurrentDir()
+src = Glob('cJSON.c')
+CPPPATH = [cwd]
+group = DefineGroup('cJSON', src, depend = [''], CPPPATH = CPPPATH)
+Return('group')

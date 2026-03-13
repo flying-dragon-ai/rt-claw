@@ -6,10 +6,12 @@
  */
 
 #include <rtthread.h>
+#include "claw_os.h"
 #include "claw_init.h"
 
 int main(void)
 {
+    claw_log_set_enabled(1);
     claw_init();
     return 0;
 }
