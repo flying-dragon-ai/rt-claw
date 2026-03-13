@@ -9,7 +9,7 @@
 #include "claw_os.h"
 #include "claw_init.h"
 #include "services/ai/ai_engine.h"
-#include "shell_commands.h"
+#include "shell/shell_commands.h"
 
 #include <stdio.h>
 #include <string.h>

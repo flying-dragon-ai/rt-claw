@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "shell_commands.h"
+#include "shell/shell_commands.h"
 #include "services/ai/ai_engine.h"
 #include "services/ai/ai_memory.h"
 #include "services/im/feishu.h"
