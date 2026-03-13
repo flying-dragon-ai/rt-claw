@@ -401,8 +401,13 @@ void app_main(void)
         nvs_flash_init();
     }
 
-    /* Suppress log output by default; use /log on to enable */
+#ifdef CONFIG_CLAW_SHELL_ENABLE
+    /* Shell mode: suppress log by default; use /log on to enable */
     esp_log_level_set("*", ESP_LOG_NONE);
+#else
+    /* Headless mode (Feishu etc.): enable log for serial diagnostics */
+    claw_log_set_enabled(1);
+#endif
 #endif
 
     claw_init();
