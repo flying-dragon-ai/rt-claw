@@ -202,7 +202,7 @@ void claw_free(void *ptr)
 
 /* ---------- Log ---------- */
 
-static int s_log_enabled;
+static int s_log_enabled = 1;
 static const char *level_str[] = { "E", "W", "I", "D" };
 
 void claw_log_set_enabled(int enabled)

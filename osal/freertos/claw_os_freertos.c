@@ -266,7 +266,7 @@ void claw_free(void *ptr)
 
 /* ---------- Log ---------- */
 
-static int s_log_enabled;
+static int s_log_enabled = 1;
 
 void claw_log_set_enabled(int enabled)
 {
