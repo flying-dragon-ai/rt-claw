@@ -6,6 +6,7 @@
  */
 
 #include "claw_os.h"
+#include "claw_config.h"
 #include "ai_memory.h"
 
 #include <string.h>
@@ -14,13 +15,13 @@
 #define TAG "ai_mem"
 
 /*
- * Short-term memory (RAM) — conversation turn ring buffer
+ * Short-term memory (RAM) — conversation turn ring buffer.
+ * Uses cJSON for message serialization (available on all platforms).
  */
 
 #ifdef CLAW_PLATFORM_ESP_IDF
-
 #include "sdkconfig.h"
-#include "cJSON.h"
+#endif
 
 #ifdef CONFIG_CLAW_AI_MEMORY_MAX_MSGS
 #define MEM_MAX_MSGS    CONFIG_CLAW_AI_MEMORY_MAX_MSGS
@@ -72,7 +73,6 @@ void ai_memory_add_message(const char *role, const char *content_json)
 
     claw_mutex_lock(s_lock, CLAW_WAIT_FOREVER);
 
-    /* Make room if full */
     while (s_count >= MEM_MAX_MSGS) {
         drop_oldest_pair();
     }
@@ -143,15 +143,10 @@ int ai_memory_count(void)
 }
 
 /*
- * Long-term memory (NVS Flash) — persistent key-value facts
+ * Long-term memory (LTM).
+ * ESP-IDF: persistent via NVS Flash.
+ * Other platforms: RAM-only (lost on reboot).
  */
-
-#include "nvs_flash.h"
-#include "nvs.h"
-
-#define LTM_NVS_NAMESPACE  "claw_ltm"
-#define LTM_NVS_KEY_DATA   "data"
-#define LTM_NVS_KEY_COUNT  "cnt"
 
 typedef struct {
     char key[LTM_KEY_MAX];
@@ -161,7 +156,15 @@ typedef struct {
 static ltm_entry_t s_ltm[LTM_MAX_ENTRIES];
 static int         s_ltm_count;
 
-/* Flush entire LTM array to NVS */
+#ifdef CLAW_PLATFORM_ESP_IDF
+
+#include "nvs_flash.h"
+#include "nvs.h"
+
+#define LTM_NVS_NAMESPACE  "claw_ltm"
+#define LTM_NVS_KEY_DATA   "data"
+#define LTM_NVS_KEY_COUNT  "cnt"
+
 static int ltm_flush_nvs(void)
 {
     nvs_handle_t h;
@@ -184,13 +187,11 @@ static int ltm_flush_nvs(void)
     return CLAW_OK;
 }
 
-/* Load LTM array from NVS */
 static int ltm_load_nvs(void)
 {
     nvs_handle_t h;
     esp_err_t err = nvs_open(LTM_NVS_NAMESPACE, NVS_READONLY, &h);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
-        /* First boot, no data yet */
         s_ltm_count = 0;
         return CLAW_OK;
     }
@@ -224,6 +225,8 @@ static int ltm_load_nvs(void)
     return CLAW_OK;
 }
 
+static int ltm_persist(void) { return ltm_flush_nvs(); }
+
 int ai_ltm_init(void)
 {
     memset(s_ltm, 0, sizeof(s_ltm));
@@ -235,22 +238,35 @@ int ai_ltm_init(void)
     return CLAW_OK;
 }
 
+#else /* non-ESP-IDF: RAM-only LTM */
+
+static int ltm_persist(void) { return CLAW_OK; }
+
+int ai_ltm_init(void)
+{
+    memset(s_ltm, 0, sizeof(s_ltm));
+    s_ltm_count = 0;
+    CLAW_LOGI(TAG, "long-term initialized (RAM-only), max=%d",
+              LTM_MAX_ENTRIES);
+    return CLAW_OK;
+}
+
+#endif
+
 int ai_ltm_save(const char *key, const char *value)
 {
     if (!key || !value || key[0] == '\0') {
         return CLAW_ERROR;
     }
 
-    /* Update existing entry if key matches */
     for (int i = 0; i < s_ltm_count; i++) {
         if (strcmp(s_ltm[i].key, key) == 0) {
             snprintf(s_ltm[i].value, LTM_VALUE_MAX, "%s", value);
             CLAW_LOGI(TAG, "ltm updated: %s", key);
-            return ltm_flush_nvs();
+            return ltm_persist();
         }
     }
 
-    /* Add new entry */
     if (s_ltm_count >= LTM_MAX_ENTRIES) {
         CLAW_LOGE(TAG, "ltm full (%d entries)", LTM_MAX_ENTRIES);
         return CLAW_ERROR;
@@ -262,7 +278,7 @@ int ai_ltm_save(const char *key, const char *value)
     s_ltm_count++;
 
     CLAW_LOGI(TAG, "ltm saved: %s", key);
-    return ltm_flush_nvs();
+    return ltm_persist();
 }
 
 int ai_ltm_load(const char *key, char *value, size_t size)
@@ -289,7 +305,6 @@ int ai_ltm_delete(const char *key)
 
     for (int i = 0; i < s_ltm_count; i++) {
         if (strcmp(s_ltm[i].key, key) == 0) {
-            /* Shift remaining entries down */
             if (i < s_ltm_count - 1) {
                 memmove(&s_ltm[i], &s_ltm[i + 1],
                         (s_ltm_count - i - 1) * sizeof(ltm_entry_t));
@@ -298,7 +313,7 @@ int ai_ltm_delete(const char *key)
             memset(&s_ltm[s_ltm_count], 0, sizeof(ltm_entry_t));
 
             CLAW_LOGI(TAG, "ltm deleted: %s", key);
-            return ltm_flush_nvs();
+            return ltm_persist();
         }
     }
 
@@ -326,7 +341,6 @@ char *ai_ltm_build_context(void)
         return NULL;
     }
 
-    /* Estimate buffer: header + per-entry (key + value + formatting) */
     size_t buf_size = 64 + s_ltm_count * (LTM_KEY_MAX + LTM_VALUE_MAX + 8);
     char *buf = claw_malloc(buf_size);
     if (!buf) {
@@ -343,57 +357,3 @@ char *ai_ltm_build_context(void)
 
     return buf;
 }
-
-#else /* non-ESP-IDF platforms */
-
-int ai_memory_init(void)
-{
-    CLAW_LOGI(TAG, "initialized (stub)");
-    return CLAW_OK;
-}
-
-void ai_memory_add_message(const char *role, const char *content_json)
-{
-    (void)role;
-    (void)content_json;
-}
-
-void ai_memory_clear(void) {}
-int  ai_memory_count(void) { return 0; }
-
-int ai_ltm_init(void)
-{
-    CLAW_LOGI(TAG, "long-term initialized (stub)");
-    return CLAW_OK;
-}
-
-int ai_ltm_save(const char *key, const char *value)
-{
-    (void)key;
-    (void)value;
-    return CLAW_ERROR;
-}
-
-int ai_ltm_load(const char *key, char *value, size_t size)
-{
-    (void)key;
-    (void)value;
-    (void)size;
-    return CLAW_ERROR;
-}
-
-int ai_ltm_delete(const char *key)
-{
-    (void)key;
-    return CLAW_ERROR;
-}
-
-void ai_ltm_list(void) {}
-int  ai_ltm_count(void) { return 0; }
-
-char *ai_ltm_build_context(void)
-{
-    return NULL;
-}
-
-#endif

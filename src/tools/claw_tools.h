@@ -9,10 +9,7 @@
 #define __CLAW_TOOLS_H__
 
 #include "claw_os.h"
-
-#ifdef CLAW_PLATFORM_ESP_IDF
 #include "cJSON.h"
-#endif
 
 #define CLAW_TOOL_MAX       16
 #define CLAW_TOOL_NAME_MAX  32
@@ -23,11 +20,7 @@
  * @param result  Output: caller-allocated cJSON object to fill
  * @return CLAW_OK on success
  */
-#ifdef CLAW_PLATFORM_ESP_IDF
 typedef int (*claw_tool_fn)(const cJSON *params, cJSON *result);
-#else
-typedef int (*claw_tool_fn)(const void *params, void *result);
-#endif
 
 typedef struct {
     char name[CLAW_TOOL_NAME_MAX];
@@ -63,13 +56,11 @@ const claw_tool_t *claw_tool_get(int index);
  */
 const claw_tool_t *claw_tool_find(const char *name);
 
-#ifdef CLAW_PLATFORM_ESP_IDF
 /**
  * Build cJSON array of all tool definitions for Claude API.
  * Caller must cJSON_Delete() the result.
  */
 cJSON *claw_tools_to_json(void);
-#endif
 
 /**
  * Register built-in GPIO tools.

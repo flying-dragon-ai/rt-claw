@@ -6,6 +6,7 @@
  */
 
 #include <string.h>
+#include <stdio.h>
 #include "claw_os.h"
 #include "claw_config.h"
 #include "swarm.h"
@@ -18,23 +19,48 @@ static int node_count = 0;
 static claw_mutex_t swarm_lock;
 static uint32_t s_self_id;
 
+/* Platform-specific includes and node ID generation */
 #ifdef CLAW_PLATFORM_ESP_IDF
-
 #include "esp_mac.h"
 #include "lwip/sockets.h"
 
-static int s_sock = -1;
-static claw_timer_t s_hb_timer;
-
-/* Generate node ID from MAC address */
 static uint32_t generate_node_id(void)
 {
     uint8_t mac[6];
     esp_efuse_mac_get_default(mac);
-    /* Use last 4 bytes of MAC as ID */
     return ((uint32_t)mac[2] << 24) | ((uint32_t)mac[3] << 16) |
            ((uint32_t)mac[4] << 8)  | (uint32_t)mac[5];
 }
+
+#elif defined(CLAW_PLATFORM_RTTHREAD)
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
+static uint32_t generate_node_id(void)
+{
+    /* Use tick count + fixed seed for a pseudo-unique ID */
+    return 0x52540000 | (claw_tick_ms() & 0xFFFF);
+}
+
+#else
+
+static uint32_t generate_node_id(void)
+{
+    return 0x0000DEAD;
+}
+
+#endif
+
+/*
+ * Shared socket-based swarm implementation.
+ * Requires POSIX socket API (lwIP on ESP-IDF or SAL on RT-Thread).
+ */
+#if defined(CLAW_PLATFORM_ESP_IDF) || defined(CLAW_PLATFORM_RTTHREAD)
+
+static int s_sock = -1;
+static claw_timer_t s_hb_timer;
 
 static void notify_node_event(uint32_t node_id, int joined)
 {
@@ -49,14 +75,11 @@ static void notify_node_event(uint32_t node_id, int joined)
 
 static int find_or_add_node(uint32_t node_id)
 {
-    /* Find existing */
     for (int i = 0; i < CLAW_SWARM_MAX_NODES; i++) {
         if (nodes[i].state != SWARM_NODE_OFFLINE && nodes[i].id == node_id) {
             return i;
         }
     }
-
-    /* Find free slot */
     for (int i = 0; i < CLAW_SWARM_MAX_NODES; i++) {
         if (nodes[i].state == SWARM_NODE_OFFLINE) {
             nodes[i].id = node_id;
@@ -65,8 +88,7 @@ static int find_or_add_node(uint32_t node_id)
             return i;
         }
     }
-
-    return -1;  /* table full */
+    return -1;
 }
 
 static void heartbeat_send(void)
@@ -83,11 +105,11 @@ static void heartbeat_send(void)
     hb.load = 0;
     hb.port = CLAW_SWARM_PORT;
 
-    struct sockaddr_in dest = {
-        .sin_family = AF_INET,
-        .sin_port = htons(CLAW_SWARM_PORT),
-        .sin_addr.s_addr = htonl(INADDR_BROADCAST),
-    };
+    struct sockaddr_in dest;
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(CLAW_SWARM_PORT);
+    dest.sin_addr.s_addr = htonl(INADDR_BROADCAST);
 
     sendto(s_sock, &hb, sizeof(hb), 0,
            (struct sockaddr *)&dest, sizeof(dest));
@@ -104,7 +126,7 @@ static void check_timeouts(void)
             continue;
         }
         if (nodes[i].id == s_self_id) {
-            continue;   /* don't timeout self */
+            continue;
         }
         if ((now - nodes[i].last_seen) > CLAW_SWARM_TIMEOUT_MS) {
             CLAW_LOGI(TAG, "node 0x%08x timed out",
@@ -141,7 +163,6 @@ static void receiver_thread(void *arg)
             continue;
         }
 
-        /* Ignore self */
         if (hb.node_id == s_self_id) {
             continue;
         }
@@ -171,26 +192,21 @@ static void receiver_thread(void *arg)
 
 int swarm_start(void)
 {
-    /* Create UDP socket */
     s_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (s_sock < 0) {
         CLAW_LOGE(TAG, "socket create failed");
         return CLAW_ERROR;
     }
 
-    /* Enable broadcast */
     int opt = 1;
     setsockopt(s_sock, SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt));
-
-    /* Allow address reuse */
     setsockopt(s_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    /* Bind to heartbeat port */
-    struct sockaddr_in addr = {
-        .sin_family = AF_INET,
-        .sin_port = htons(CLAW_SWARM_PORT),
-        .sin_addr.s_addr = htonl(INADDR_ANY),
-    };
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(CLAW_SWARM_PORT);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(s_sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         CLAW_LOGE(TAG, "bind port %d failed", CLAW_SWARM_PORT);
@@ -199,7 +215,6 @@ int swarm_start(void)
         return CLAW_ERROR;
     }
 
-    /* Register self in node table */
     claw_mutex_lock(swarm_lock, CLAW_WAIT_FOREVER);
     int idx = find_or_add_node(s_self_id);
     if (idx >= 0) {
@@ -208,12 +223,10 @@ int swarm_start(void)
     }
     claw_mutex_unlock(swarm_lock);
 
-    /* Start heartbeat timer */
     s_hb_timer = claw_timer_create("swarm_hb", heartbeat_timer_cb, NULL,
                                     CLAW_SWARM_HEARTBEAT_MS, 1);
     claw_timer_start(s_hb_timer);
 
-    /* Start receiver thread */
     claw_thread_create("swarm_rx", receiver_thread, NULL,
                        CLAW_SWARM_THREAD_STACK, CLAW_SWARM_THREAD_PRIO);
 
@@ -221,12 +234,7 @@ int swarm_start(void)
     return CLAW_OK;
 }
 
-#else /* non-ESP-IDF platforms */
-
-static uint32_t generate_node_id(void)
-{
-    return 0x0000DEAD;
-}
+#else /* no socket support */
 
 int swarm_start(void)
 {

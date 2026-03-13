@@ -4,6 +4,7 @@
  */
 
 #include "claw_tools.h"
+#include "claw_config.h"
 
 #include <string.h>
 
@@ -80,8 +81,6 @@ const claw_tool_t *claw_tool_find(const char *name)
     return NULL;
 }
 
-#ifdef CLAW_PLATFORM_ESP_IDF
-
 cJSON *claw_tools_to_json(void)
 {
     cJSON *arr = cJSON_CreateArray();
@@ -103,5 +102,3 @@ cJSON *claw_tools_to_json(void)
     }
     return arr;
 }
-
-#endif

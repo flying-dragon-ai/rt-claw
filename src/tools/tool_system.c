@@ -96,7 +96,63 @@ void claw_tools_register_system(void)
         schema_empty, tool_system_restart);
 }
 
-#else /* non-ESP-IDF */
+#elif defined(CLAW_PLATFORM_RTTHREAD)
+
+#include <rtthread.h>
+
+static int tool_system_info(const cJSON *params, cJSON *result)
+{
+    (void)params;
+
+    cJSON_AddStringToObject(result, "status", "ok");
+    cJSON_AddStringToObject(result, "project", "rt-claw");
+    cJSON_AddStringToObject(result, "version", RT_CLAW_VERSION);
+    cJSON_AddStringToObject(result, "platform", "QEMU vexpress-a9");
+    cJSON_AddStringToObject(result, "rtos", "RT-Thread");
+    cJSON_AddNumberToObject(result, "rtos_version", RT_VERSION_MAJOR * 10000
+                            + RT_VERSION_MINOR * 100 + RT_VERSION_PATCH);
+    cJSON_AddNumberToObject(result, "uptime_seconds",
+                            (double)rt_tick_get() / RT_TICK_PER_SECOND);
+
+    return CLAW_OK;
+}
+
+static int tool_memory_info(const cJSON *params, cJSON *result)
+{
+    (void)params;
+
+    rt_size_t total = 0, used = 0, max_used = 0;
+    rt_memory_info(&total, &used, &max_used);
+
+    cJSON_AddStringToObject(result, "status", "ok");
+    cJSON_AddNumberToObject(result, "heap_total_bytes", (double)total);
+    cJSON_AddNumberToObject(result, "heap_free_bytes",
+                            (double)(total - used));
+    cJSON_AddNumberToObject(result, "heap_max_used_bytes", (double)max_used);
+    if (total > 0) {
+        cJSON_AddNumberToObject(result, "heap_used_percent",
+                                (double)used / total * 100.0);
+    }
+
+    return CLAW_OK;
+}
+
+static const char schema_empty[] =
+    "{\"type\":\"object\",\"properties\":{}}";
+
+void claw_tools_register_system(void)
+{
+    claw_tool_register("system_info",
+        "Get system information: platform, RTOS version, and uptime.",
+        schema_empty, tool_system_info);
+
+    claw_tool_register("memory_info",
+        "Get heap memory status: total, free, max-ever-used bytes, "
+        "and usage percentage.",
+        schema_empty, tool_memory_info);
+}
+
+#else /* unknown platform */
 
 void claw_tools_register_system(void)
 {
