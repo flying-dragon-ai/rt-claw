@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, rt-claw Development Team
+ * Copyright (c) 2026, Chao Liu <chao.liu.zevorn@gmail.com>
  * SPDX-License-Identifier: MIT
  *
  * Platform entry for QEMU vexpress-a9 / RT-Thread.
