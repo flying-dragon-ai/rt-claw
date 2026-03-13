@@ -121,6 +121,9 @@ MESON_BUILDDIR_S3 := $(BUILD_DIR)/esp32s3-qemu
 CROSS_FILE_S3     := platform/esp32s3-qemu/cross.ini
 ESP_S3_PLATFORM   := platform/esp32s3-qemu
 
+# Espressif QEMU xtensa binary (not in PATH by default after export.sh)
+QEMU_XTENSA := $(HOME)/.espressif/tools/qemu-xtensa/esp_develop_9.0.0_20240606/qemu/bin/qemu-system-xtensa
+
 .PHONY: esp32s3-qemu
 esp32s3-qemu:
 	@if [ ! -f $(ESP_S3_PLATFORM)/sdkconfig ]; then \
@@ -147,13 +150,12 @@ run-esp32s3-qemu: esp32s3-qemu
 		echo "Starting QEMU in debug mode (GDB port 1234)..."; \
 		echo "Connect: xtensa-esp32s3-elf-gdb $(ESP_S3_PLATFORM)/build/rt-claw.elf -ex 'target remote :1234'"; \
 	fi
-	@echo ">>> Starting QEMU (ESP32-S3, icount=3) ..."
-	qemu-system-xtensa \
+	@echo ">>> Starting QEMU (ESP32-S3, icount=1) ..."
+	$(QEMU_XTENSA) \
 		$(if $(filter 1,$(GRAPHICS)),,-nographic) \
-		-icount 3 \
+		-icount 1 \
 		-machine esp32s3 \
 		-drive file=$(ESP_S3_PLATFORM)/build/flash_image.bin,if=mtd,format=raw \
-		-global driver=timer.esp32s3.timg,property=wdt_disable,value=true \
 		-nic user,model=open_eth \
 		$(if $(filter 1,$(GDB)),-S -s)
 
