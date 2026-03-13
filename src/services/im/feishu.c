@@ -60,6 +60,27 @@ static claw_mutex_t s_lock;
 static esp_websocket_client_handle_t s_ws_client;
 /* Accessed from both WS callback and worker thread */
 static volatile int s_ws_connected;
+/* Tick when WS connected — used to drain stale events after reconnect */
+static volatile uint32_t s_ws_connect_tick;
+#define WS_STALE_WINDOW_MS  5000
+
+/* Event dedup ring buffer — drop events already processed */
+#define DEDUP_SLOTS  8
+#define EVENT_ID_MAX 48
+static char s_dedup[DEDUP_SLOTS][EVENT_ID_MAX];
+static int  s_dedup_idx;
+
+static int dedup_check_and_add(const char *event_id)
+{
+    for (int i = 0; i < DEDUP_SLOTS; i++) {
+        if (strcmp(s_dedup[i], event_id) == 0) {
+            return 1; /* duplicate */
+        }
+    }
+    snprintf(s_dedup[s_dedup_idx], EVENT_ID_MAX, "%s", event_id);
+    s_dedup_idx = (s_dedup_idx + 1) % DEDUP_SLOTS;
+    return 0;
+}
 
 struct http_ctx {
     char   *buf;
@@ -132,7 +153,9 @@ static int pb_encode_tag(uint8_t *buf, int field, int wire_type)
 struct feishu_frame {
     int          method;
     const char  *type;          /* from header "type" */
+    int          type_len;
     const char  *msg_id;        /* from header "message_id" */
+    int          msg_id_len;
     const uint8_t *payload;
     int          payload_len;
 };
@@ -222,11 +245,11 @@ static int parse_frame(const uint8_t *buf, int len, struct feishu_frame *f)
                 if (key && val_str) {
                     if (key_len == 4 && memcmp(key, "type", 4) == 0) {
                         f->type = val_str;
-                        /* null-terminate check not needed, we use val_len */
-                        (void)val_len;
+                        f->type_len = val_len;
                     } else if (key_len == 10 &&
                                memcmp(key, "message_id", 10) == 0) {
                         f->msg_id = val_str;
+                        f->msg_id_len = val_len;
                     }
                 }
             }
@@ -237,6 +260,38 @@ static int parse_frame(const uint8_t *buf, int len, struct feishu_frame *f)
         }
     }
     return (f->method >= 0) ? 0 : -1;
+}
+
+/*
+ * Encode a single Header sub-message { key(1)=k, value(2)=v }
+ * into buf, return bytes written.
+ */
+static int pb_encode_header(uint8_t *buf, int cap,
+                            const char *k, int klen,
+                            const char *v, int vlen)
+{
+    uint8_t inner[128];
+    int ip = 0;
+
+    ip += pb_encode_tag(inner + ip, 1, PB_LEN);
+    ip += pb_encode_varint(inner + ip, klen);
+    memcpy(inner + ip, k, klen);
+    ip += klen;
+    ip += pb_encode_tag(inner + ip, 2, PB_LEN);
+    ip += pb_encode_varint(inner + ip, vlen);
+    memcpy(inner + ip, v, vlen);
+    ip += vlen;
+
+    /* field 5 (Header) length-delimited */
+    int pos = 0;
+    pos += pb_encode_tag(buf + pos, 5, PB_LEN);
+    pos += pb_encode_varint(buf + pos, ip);
+    if (pos + ip > cap) {
+        return 0;
+    }
+    memcpy(buf + pos, inner, ip);
+    pos += ip;
+    return pos;
 }
 
 /*
@@ -251,27 +306,63 @@ static int build_pong_frame(uint8_t *buf, int cap)
     pos += pb_encode_tag(buf + pos, 4, PB_VARINT);
     pos += pb_encode_varint(buf + pos, 0);
 
-    /* field 5: Header { key="type", value="pong" } */
-    /* Build inner header first */
-    uint8_t hdr[32];
-    int hp = 0;
+    pos += pb_encode_header(buf + pos, cap - pos, "type", 4, "pong", 4);
 
-    hp += pb_encode_tag(hdr + hp, 1, PB_LEN);
-    hp += pb_encode_varint(hdr + hp, 4);
-    memcpy(hdr + hp, "type", 4);
-    hp += 4;
-    hp += pb_encode_tag(hdr + hp, 2, PB_LEN);
-    hp += pb_encode_varint(hdr + hp, 4);
-    memcpy(hdr + hp, "pong", 4);
-    hp += 4;
+    return pos;
+}
 
-    if (pos + 2 + hp > cap) {
+/*
+ * Build an ACK frame for a received DATA event.
+ * Feishu requires the client to echo back the message_id to acknowledge
+ * receipt; otherwise the event will be re-delivered.
+ */
+/*
+ * ACK payload — Feishu requires `{"code":0}` in the response payload
+ * to confirm successful processing. Without it the event is re-delivered.
+ */
+static const char ACK_PAYLOAD[] = "{\"code\":0}";
+
+static int build_ack_frame(uint8_t *buf, int cap,
+                           const char *msg_id, int msg_id_len)
+{
+    int pos = 0;
+    int n;
+
+    /* field 3: service = 0 */
+    pos += pb_encode_tag(buf + pos, 3, PB_VARINT);
+    pos += pb_encode_varint(buf + pos, 0);
+
+    /* field 4: method = 0 (CONTROL) */
+    pos += pb_encode_tag(buf + pos, 4, PB_VARINT);
+    pos += pb_encode_varint(buf + pos, 0);
+
+    /* Header: type = "event_ack" */
+    n = pb_encode_header(buf + pos, cap - pos,
+                         "type", 4, "event_ack", 9);
+    if (n == 0) {
         return 0;
     }
-    pos += pb_encode_tag(buf + pos, 5, PB_LEN);
-    pos += pb_encode_varint(buf + pos, hp);
-    memcpy(buf + pos, hdr, hp);
-    pos += hp;
+    pos += n;
+
+    /* Header: message_id = <msg_id> */
+    if (msg_id && msg_id_len > 0) {
+        n = pb_encode_header(buf + pos, cap - pos,
+                             "message_id", 10, msg_id, msg_id_len);
+        if (n == 0) {
+            return 0;
+        }
+        pos += n;
+    }
+
+    /* field 8: payload = {"code":0} */
+    int plen = (int)sizeof(ACK_PAYLOAD) - 1;
+    pos += pb_encode_tag(buf + pos, 8, PB_LEN);
+    pos += pb_encode_varint(buf + pos, plen);
+    if (pos + plen > cap) {
+        return 0;
+    }
+    memcpy(buf + pos, ACK_PAYLOAD, plen);
+    pos += plen;
 
     return pos;
 }
@@ -463,11 +554,21 @@ static void ai_worker_thread(void *arg)
         s_msg.pending = 0;
         claw_mutex_unlock(s_msg_lock);
 
-        CLAW_LOGI(TAG, "processing: %s", text);
+        CLAW_LOGI(TAG, "[%lu ms] ... ai_chat start: \"%s\"",
+                  (unsigned long)claw_tick_ms(), text);
         int ret = ai_chat(text, reply, REPLY_BUF_SIZE);
+        CLAW_LOGI(TAG, "[%lu ms] ... ai_chat done, ret=%d",
+                  (unsigned long)claw_tick_ms(), ret);
         if (ret == CLAW_OK && reply[0] != '\0') {
+            CLAW_LOGI(TAG, "[%lu ms] >>> sending reply: \"%.120s%s\"",
+                      (unsigned long)claw_tick_ms(), reply,
+                      strlen(reply) > 120 ? "..." : "");
             send_reply(chat_id, reply);
+            CLAW_LOGI(TAG, "[%lu ms] >>> reply sent",
+                      (unsigned long)claw_tick_ms());
         } else {
+            CLAW_LOGW(TAG, "[%lu ms] >>> sending error reply",
+                      (unsigned long)claw_tick_ms());
             send_reply(chat_id, "[rt-claw] AI engine error");
         }
     }
@@ -507,7 +608,13 @@ static void handle_message_event(cJSON *event)
     }
 
     const char *user_msg = text->valuestring;
-    CLAW_LOGI(TAG, "recv: %s", user_msg);
+
+    cJSON *msg_id_j = cJSON_GetObjectItem(message, "message_id");
+    const char *mid = (msg_id_j && cJSON_IsString(msg_id_j))
+                      ? msg_id_j->valuestring : "?";
+
+    CLAW_LOGI(TAG, "[%lu ms] <<< recv msg_id=%s text=\"%s\"",
+              (unsigned long)claw_tick_ms(), mid, user_msg);
 
     cJSON *chat_id = cJSON_GetObjectItem(message, "chat_id");
     if (!chat_id || !cJSON_IsString(chat_id)) {
@@ -519,7 +626,8 @@ static void handle_message_event(cJSON *event)
     claw_mutex_lock(s_msg_lock, CLAW_WAIT_FOREVER);
     if (s_msg.pending) {
         claw_mutex_unlock(s_msg_lock);
-        CLAW_LOGW(TAG, "worker busy, dropping message");
+        CLAW_LOGW(TAG, "[%lu ms] !!! worker busy, dropping msg_id=%s",
+                  (unsigned long)claw_tick_ms(), mid);
         cJSON_Delete(content);
         return;
     }
@@ -528,6 +636,8 @@ static void handle_message_event(cJSON *event)
     s_msg.pending = 1;
     claw_mutex_unlock(s_msg_lock);
 
+    CLAW_LOGI(TAG, "[%lu ms] --> queued to ai worker",
+              (unsigned long)claw_tick_ms());
     claw_sem_give(s_msg_sem);
     cJSON_Delete(content);
 }
@@ -544,6 +654,29 @@ static void process_event_payload(const uint8_t *data, int len)
 
     cJSON *header = cJSON_GetObjectItem(root, "header");
     if (header) {
+        /* Dedup by event_id */
+        cJSON *eid = cJSON_GetObjectItem(header, "event_id");
+        if (eid && cJSON_IsString(eid)) {
+            if (dedup_check_and_add(eid->valuestring)) {
+                CLAW_LOGW(TAG, "[%lu ms] dup event_id=%s, dropped",
+                          (unsigned long)claw_tick_ms(),
+                          eid->valuestring);
+                cJSON_Delete(root);
+                return;
+            }
+        }
+
+        /* Drop stale events queued before this WS session */
+        uint32_t now = claw_tick_ms();
+        if (s_ws_connect_tick > 0 &&
+            (now - s_ws_connect_tick) < WS_STALE_WINDOW_MS) {
+            CLAW_LOGW(TAG, "[%lu ms] stale event within %dms "
+                      "of ws connect, dropped",
+                      (unsigned long)now, WS_STALE_WINDOW_MS);
+            cJSON_Delete(root);
+            return;
+        }
+
         cJSON *event_type = cJSON_GetObjectItem(header, "event_type");
         if (event_type && cJSON_IsString(event_type)) {
             if (strcmp(event_type->valuestring,
@@ -569,12 +702,15 @@ static void process_event_payload(const uint8_t *data, int len)
 static void ws_event_handler(void *arg, esp_event_base_t base,
                              int32_t event_id, void *event_data)
 {
+    (void)arg;
+    (void)base;
     esp_websocket_event_data_t *ws = event_data;
 
     switch (event_id) {
     case WEBSOCKET_EVENT_CONNECTED:
         CLAW_LOGI(TAG, "ws connected");
         s_ws_connected = 1;
+        s_ws_connect_tick = claw_tick_ms();
         break;
 
     case WEBSOCKET_EVENT_DISCONNECTED:
@@ -588,7 +724,8 @@ static void ws_event_handler(void *arg, esp_event_base_t base,
             struct feishu_frame f;
             if (parse_frame((const uint8_t *)ws->data_ptr,
                             ws->data_len, &f) == 0) {
-                if (f.type && memcmp(f.type, "ping", 4) == 0) {
+                if (f.type && f.type_len == 4 &&
+                    memcmp(f.type, "ping", 4) == 0) {
                     /* Respond with pong */
                     uint8_t pong[64];
                     int plen = build_pong_frame(pong, sizeof(pong));
@@ -600,6 +737,26 @@ static void ws_event_handler(void *arg, esp_event_base_t base,
                     CLAW_LOGD(TAG, "ping/pong");
                 } else if (f.method == 1 && f.payload && f.payload_len > 0) {
                     /* DATA frame — payload is JSON event */
+                    CLAW_LOGI(TAG, "[%lu ms] ws DATA frame, "
+                              "msg_id_len=%d, payload_len=%d",
+                              (unsigned long)claw_tick_ms(),
+                              f.msg_id_len, f.payload_len);
+
+                    /* ACK immediately so Feishu won't re-deliver */
+                    if (f.msg_id && f.msg_id_len > 0) {
+                        uint8_t ack[128];
+                        int alen = build_ack_frame(ack, sizeof(ack),
+                                                   f.msg_id,
+                                                   f.msg_id_len);
+                        if (alen > 0 && s_ws_client) {
+                            esp_websocket_client_send_bin(
+                                s_ws_client, (const char *)ack,
+                                alen, portMAX_DELAY);
+                            CLAW_LOGI(TAG, "[%lu ms] sent ACK",
+                                      (unsigned long)claw_tick_ms());
+                        }
+                    }
+
                     process_event_payload(f.payload, f.payload_len);
                 }
             }
