@@ -29,7 +29,31 @@ static int tool_system_info(const cJSON *params, cJSON *result)
     cJSON_AddStringToObject(result, "status", "ok");
     cJSON_AddStringToObject(result, "project", "rt-claw");
     cJSON_AddStringToObject(result, "version", RT_CLAW_VERSION);
-    cJSON_AddStringToObject(result, "chip", "ESP32-C3");
+    const char *chip_name;
+    switch (ci.model) {
+    case CHIP_ESP32:
+        chip_name = "ESP32";
+        break;
+    case CHIP_ESP32S2:
+        chip_name = "ESP32-S2";
+        break;
+    case CHIP_ESP32S3:
+        chip_name = "ESP32-S3";
+        break;
+    case CHIP_ESP32C3:
+        chip_name = "ESP32-C3";
+        break;
+    case CHIP_ESP32H2:
+        chip_name = "ESP32-H2";
+        break;
+    case CHIP_ESP32C6:
+        chip_name = "ESP32-C6";
+        break;
+    default:
+        chip_name = "Unknown";
+        break;
+    }
+    cJSON_AddStringToObject(result, "chip", chip_name);
     cJSON_AddNumberToObject(result, "cores", ci.cores);
     cJSON_AddNumberToObject(result, "revision", ci.revision);
 
@@ -91,7 +115,7 @@ void claw_tools_register_system(void)
         schema_empty, tool_memory_info);
 
     claw_tool_register("system_restart",
-        "Restart the ESP32-C3 system. Use with caution — "
+        "Restart the system. Use with caution — "
         "this will reboot the device after a 2-second delay.",
         schema_empty, tool_system_restart);
 }
