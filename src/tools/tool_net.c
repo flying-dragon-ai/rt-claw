@@ -14,8 +14,8 @@
 
 #define TAG "tool_net"
 
-/* Truncate response body to avoid blowing up LLM context */
-#define NET_RESP_MAX    2048
+/* Truncate response body to fit LLM context window */
+#define NET_RESP_MAX    16384
 #define NET_TIMEOUT_SEC 30
 
 #ifdef CLAW_PLATFORM_ESP_IDF
@@ -417,10 +417,20 @@ static const char schema_http_request[] =
 
 void claw_tools_register_net(void)
 {
-    claw_tool_register("http_request",
-        "Make an HTTP request (GET or POST). Returns status code and "
-        "response body (truncated to 2KB). Use this to fetch web pages, "
+#ifdef CLAW_PLATFORM_ESP_IDF
+    static const char desc[] =
+        "Make an HTTP or HTTPS request (GET or POST). Returns status code "
+        "and response body (truncated to 16KB). Use this to fetch web pages, "
         "call REST APIs, or check network connectivity. "
-        "On RT-Thread QEMU, only HTTP is supported (no HTTPS).",
-        schema_http_request, tool_http_request);
+        "Both HTTP and HTTPS URLs are fully supported.";
+#else
+    static const char desc[] =
+        "Make an HTTP request (GET or POST). Returns status code and "
+        "response body (truncated to 16KB). Use this to fetch web pages, "
+        "call REST APIs, or check network connectivity. "
+        "Only plain HTTP is supported (no HTTPS).";
+#endif
+
+    claw_tool_register("http_request", desc,
+                       schema_http_request, tool_http_request);
 }
