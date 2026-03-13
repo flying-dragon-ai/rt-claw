@@ -143,7 +143,87 @@ int net_service_init(void)
     return CLAW_OK;
 }
 
-#else /* non-ESP-IDF platforms */
+#elif defined(CLAW_PLATFORM_RTTHREAD)
+
+#include <rtthread.h>
+#include <netif/ethernetif.h>
+#include "lwip/ip4_addr.h"
+#include "drv_smc911x.h"
+
+static void net_link_thread(void *arg)
+{
+    (void)arg;
+    smc911x_link_up();
+}
+
+int net_service_init(void)
+{
+    CLAW_LOGI(TAG, "waiting for network interface ...");
+
+    /*
+     * RT-Thread + lwIP auto-initializes the NIC via INIT_APP_EXPORT.
+     * The smc911x driver registers device "e0" but defers link-up
+     * so that the boot sequence is not blocked by DHCP processing.
+     */
+    rt_device_t dev = RT_NULL;
+    int timeout = 15;
+
+    while (timeout > 0) {
+        dev = rt_device_find("e0");
+        if (dev) {
+            CLAW_LOGI(TAG, "network interface e0 found");
+            break;
+        }
+        claw_thread_delay_ms(1000);
+        timeout--;
+    }
+
+    if (!dev) {
+        CLAW_LOGW(TAG, "no network interface found (continuing without net)");
+        return CLAW_OK;
+    }
+
+    /*
+     * Bring up link via eth_device_linkchange in a helper thread.
+     * This triggers the standard erx thread to call
+     * netifapi_netif_set_link_up, which starts DHCP.
+     */
+    {
+        rt_thread_t t = rt_thread_create("netlink",
+                                         net_link_thread, RT_NULL,
+                                         2048, 20, 10);
+        if (t) {
+            rt_thread_startup(t);
+        }
+    }
+
+    /* Wait for DHCP to assign IP */
+    CLAW_LOGI(TAG, "waiting for DHCP ...");
+    {
+        struct eth_device *ethdev = (struct eth_device *)dev;
+        int dhcp_wait = 0;
+        while (dhcp_wait < 15) {
+            claw_thread_delay_ms(1000);
+            dhcp_wait++;
+            if (ethdev->netif && ethdev->netif->ip_addr.addr != 0) {
+                break;
+            }
+        }
+        if (ethdev->netif && ethdev->netif->ip_addr.addr != 0) {
+            CLAW_LOGI(TAG, "got ip: %s",
+                      ip4addr_ntoa(&ethdev->netif->ip_addr));
+            CLAW_LOGI(TAG, "gateway: %s",
+                      ip4addr_ntoa(&ethdev->netif->gw));
+        } else {
+            CLAW_LOGW(TAG, "DHCP timeout (15s), no IP acquired");
+        }
+    }
+
+    CLAW_LOGI(TAG, "network service ready");
+    return CLAW_OK;
+}
+
+#else /* unknown platform */
 
 int net_service_init(void)
 {

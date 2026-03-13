@@ -339,4 +339,7 @@
 #define LAN9118_INT_EN_RDFL_EN      0x00000020  /* R/W */
 #define LAN9118_MAC_CR_HBDIS        0x10000000
 
+/* Public API for smc911x Ethernet driver */
+void smc911x_link_up(void);
+
 #endif  /* _LAN9118REG_H_ */

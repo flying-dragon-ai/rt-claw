@@ -319,27 +319,8 @@ static int smc911x_miiphy_write(struct mii_dev *bus, int phy, int devad,
 }
 #endif
 
-static void smc911x_isr(int vector, void *param)
-{
-    uint32_t status;
-    struct eth_device_smc911x *emac;
-
-    emac = SMC911X_EMAC_DEVICE(param);
-
-    status = smc911x_reg_read(emac, LAN9118_INT_STS);
-
-    if (status & LAN9118_INT_STS_RSFL)
-    {
-        eth_device_ready(&emac->parent);
-    }
-    smc911x_reg_write(emac, LAN9118_INT_STS, status);
-
-    return ;
-}
-
 static rt_err_t smc911x_emac_init(rt_device_t dev)
 {
-    // uint32_t value;
     struct eth_device_smc911x *emac;
 
     emac = SMC911X_EMAC_DEVICE(dev);
@@ -354,15 +335,13 @@ static rt_err_t smc911x_emac_init(rt_device_t dev)
     /* Turn on Tx + Rx */
     smc911x_enable(emac);
 
-    /* Interrupt on every received packet */
-    smc911x_reg_write(emac, LAN9118_FIFO_INT, 0x01 << 8);
-    smc911x_reg_write(emac, LAN9118_INT_EN, LAN9118_INT_EN_RDFL_EN | LAN9118_INT_RSFL);
-
-    /* enable interrupt */
-    smc911x_reg_write(emac, LAN9118_IRQ_CFG, LAN9118_IRQ_CFG_IRQ_EN | LAN9118_IRQ_CFG_IRQ_POL | LAN9118_IRQ_CFG_IRQ_TYPE);
-
-    rt_hw_interrupt_install(emac->irqno, smc911x_isr, emac, "smc911x");
-    rt_hw_interrupt_umask(emac->irqno);
+    /*
+     * Pure polling mode — all interrupts disabled.
+     * RX is handled by the smc911x_rx_poll thread (5ms interval).
+     * TX is synchronous (LWIP_NO_TX_THREAD).
+     */
+    smc911x_reg_write(emac, LAN9118_INT_EN, 0);
+    smc911x_reg_write(emac, LAN9118_IRQ_CFG, 0);
 
     return RT_EOK;
 }
@@ -418,8 +397,16 @@ rt_err_t smc911x_emac_tx(rt_device_t dev, struct pbuf *p)
         smc911x_reg_write(emac, LAN9118_TXDFIFOP, *data++);
     }
 
-    /* wait for transmission */
-    while (!(LAN9118_TX_FIFO_INF_TXSUSED(smc911x_reg_read(emac, LAN9118_TX_FIFO_INF))));
+    /* wait for transmission with timeout */
+    {
+        int tx_timeout = 100000;
+        while (tx_timeout-- > 0 &&
+               !(LAN9118_TX_FIFO_INF_TXSUSED(smc911x_reg_read(emac, LAN9118_TX_FIFO_INF))));
+        if (tx_timeout <= 0)
+        {
+            return -RT_ETIMEOUT;
+        }
+    }
 
     /* get status. Ignore 'no carrier' error, it has no meaning for
      * full duplex operation
@@ -464,20 +451,33 @@ struct pbuf *smc911x_emac_rx(rt_device_t dev)
 
         tmplen = (pktlen + 3) / 4;
 
-        /* allocate pbuf */
+        /* allocate pbuf (word-aligned size for FIFO reads) */
         p = pbuf_alloc(PBUF_RAW, tmplen * 4, PBUF_RAM);
         if (p)
         {
             uint32_t *data = (uint32_t *)p->payload;
-            while (tmplen--)
+            uint32_t words = tmplen;
+            while (words--)
             {
                 *data++ = smc911x_reg_read(emac, LAN9118_RXDFIFOP);
+            }
+        }
+        else
+        {
+            /* drain FIFO even if alloc fails */
+            while (tmplen--)
+            {
+                smc911x_reg_read(emac, LAN9118_RXDFIFOP);
             }
         }
 
         if (status & LAN9118_RXS_ES)
         {
-            rt_kprintf(DRIVERNAME ": dropped bad packet. Status: 0x%08x\n", status);
+            if (p)
+            {
+                pbuf_free(p);
+                p = RT_NULL;
+            }
         }
     }
 
@@ -556,7 +556,56 @@ int smc911x_emac_hw_init(void)
     }
 #endif
 
-    eth_device_linkchange(&_emac.parent, RT_TRUE);
+    /*
+     * Do NOT call eth_device_linkchange here.
+     * The link-up is deferred to net_service_init so that
+     * the full init sequence is not blocked by DHCP processing.
+     */
     return 0;
 }
 INIT_APP_EXPORT(smc911x_emac_hw_init);
+
+/*
+ * RX polling thread — signals the standard ethernetif erx thread.
+ *
+ * Hardware interrupts are disabled (pure polling).  This thread
+ * polls the NIC FIFO status every 5 ms and calls eth_device_ready()
+ * when packets are pending.  The standard erx thread then calls
+ * smc911x_emac_rx() and passes pbufs to tcpip_input().
+ */
+static void smc911x_rx_poll(void *param)
+{
+    struct eth_device_smc911x *emac = (struct eth_device_smc911x *)param;
+
+    /* Wait for netif to be set up */
+    while (emac->parent.netif == RT_NULL)
+    {
+        rt_thread_mdelay(100);
+    }
+    while (1)
+    {
+        if (LAN9118_RX_FIFO_INF_RXSUSED(
+                smc911x_reg_read(emac, LAN9118_RX_FIFO_INF)))
+        {
+            eth_device_ready(&emac->parent);
+        }
+        rt_thread_mdelay(5);
+    }
+}
+
+static int smc911x_rx_poll_init(void)
+{
+    rt_thread_t t = rt_thread_create("erxpoll", smc911x_rx_poll, &_emac,
+                                     2048, 14, 10);
+    if (t)
+    {
+        rt_thread_startup(t);
+    }
+    return 0;
+}
+INIT_APP_EXPORT(smc911x_rx_poll_init);
+
+void smc911x_link_up(void)
+{
+    eth_device_linkchange(&_emac.parent, RT_TRUE);
+}
