@@ -123,12 +123,8 @@ claw_mq_t claw_mq_create(const char *name,
 int claw_mq_send(claw_mq_t mq, const void *msg, uint32_t size,
                   uint32_t timeout_ms)
 {
-    rt_err_t ret;
-
-    if (timeout_ms == CLAW_NO_WAIT || timeout_ms == CLAW_WAIT_FOREVER)
-        ret = rt_mq_send_wait((rt_mq_t)mq, msg, size, ms_to_tick(timeout_ms));
-    else
-        ret = rt_mq_send_wait((rt_mq_t)mq, msg, size, ms_to_tick(timeout_ms));
+    rt_err_t ret = rt_mq_send_wait((rt_mq_t)mq, msg, size,
+                                    ms_to_tick(timeout_ms));
 
     if (ret == RT_EOK)
         return CLAW_OK;
