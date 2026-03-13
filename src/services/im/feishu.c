@@ -60,15 +60,31 @@ static claw_mutex_t s_lock;
 static esp_websocket_client_handle_t s_ws_client;
 /* Accessed from both WS callback and worker thread */
 static volatile int s_ws_connected;
-/* Tick when WS connected — used to drain stale events after reconnect */
-static volatile uint32_t s_ws_connect_tick;
-#define WS_STALE_WINDOW_MS  5000
 
 /* Event dedup ring buffer — drop events already processed */
 #define DEDUP_SLOTS  8
 #define EVENT_ID_MAX 48
 static char s_dedup[DEDUP_SLOTS][EVENT_ID_MAX];
 static int  s_dedup_idx;
+
+/*
+ * Stale event filter based on create_time (unix ms from event header).
+ * Track the latest create_time seen; drop events older than threshold.
+ */
+static uint64_t s_latest_event_ts;
+#define STALE_EVENT_MAX_AGE_MS  60000
+
+/* Parse decimal string to uint64 (avoids checkpatch strtoull warning) */
+static uint64_t parse_u64(const char *s)
+{
+    uint64_t v = 0;
+
+    while (*s >= '0' && *s <= '9') {
+        v = v * 10 + (*s - '0');
+        s++;
+    }
+    return v;
+}
 
 static int dedup_check_and_add(const char *event_id)
 {
@@ -484,17 +500,26 @@ static int send_reply(const char *chat_id, const char *text)
     char auth[TOKEN_BUF_SIZE + 16];
     get_auth_header(auth, sizeof(auth));
 
-    cJSON *content_obj = cJSON_CreateObject();
-    cJSON_AddStringToObject(content_obj, "text", text);
-    char *content_str = cJSON_PrintUnformatted(content_obj);
-    cJSON_Delete(content_obj);
+    /*
+     * Use interactive card with markdown element so that tables,
+     * code blocks, bold text etc. render correctly in Feishu.
+     */
+    cJSON *card = cJSON_CreateObject();
+    cJSON *elements = cJSON_AddArrayToObject(card, "elements");
+    cJSON *md_elem = cJSON_CreateObject();
+    cJSON_AddStringToObject(md_elem, "tag", "markdown");
+    cJSON_AddStringToObject(md_elem, "content", text);
+    cJSON_AddItemToArray(elements, md_elem);
+
+    char *content_str = cJSON_PrintUnformatted(card);
+    cJSON_Delete(card);
     if (!content_str) {
         return CLAW_NOMEM;
     }
 
     cJSON *body = cJSON_CreateObject();
     cJSON_AddStringToObject(body, "receive_id", chat_id);
-    cJSON_AddStringToObject(body, "msg_type", "text");
+    cJSON_AddStringToObject(body, "msg_type", "interactive");
     cJSON_AddStringToObject(body, "content", content_str);
     char *body_str = cJSON_PrintUnformatted(body);
     cJSON_Delete(body);
@@ -517,6 +542,37 @@ static int send_reply(const char *chat_id, const char *text)
 }
 
 /* ------------------------------------------------------------------ */
+/*  Reaction — add an emoji reaction to a user message                 */
+/* ------------------------------------------------------------------ */
+
+static void add_reaction(const char *message_id, const char *emoji_type)
+{
+    char auth[TOKEN_BUF_SIZE + 16];
+    get_auth_header(auth, sizeof(auth));
+
+    char url[256];
+    snprintf(url, sizeof(url),
+             "https://open.feishu.cn/open-apis/im/v1/messages/%s/reactions",
+             message_id);
+
+    cJSON *body = cJSON_CreateObject();
+    cJSON *rt = cJSON_AddObjectToObject(body, "reaction_type");
+    cJSON_AddStringToObject(rt, "emoji_type", emoji_type);
+    char *body_str = cJSON_PrintUnformatted(body);
+    cJSON_Delete(body);
+    if (!body_str) {
+        return;
+    }
+
+    char resp[256];
+    int ret = http_post_json(url, auth, body_str, resp, sizeof(resp));
+    claw_free(body_str);
+    if (ret != CLAW_OK) {
+        CLAW_LOGW(TAG, "add reaction failed for msg %s", message_id);
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /*  AI worker — run ai_chat() off the websocket callback stack         */
 /* ------------------------------------------------------------------ */
 
@@ -524,10 +580,18 @@ static int send_reply(const char *chat_id, const char *text)
 #define CHAT_ID_MAX   64
 #define WORKER_STACK   16384
 
+#define MSG_ID_MAX    64
+
+/* Worker states: only accept new messages when IDLE */
+#define WORKER_IDLE       0
+#define WORKER_PENDING    1
+#define WORKER_PROCESSING 2
+
 typedef struct {
     char text[MSG_TEXT_MAX];
     char chat_id[CHAT_ID_MAX];
-    int  pending;
+    char msg_id[MSG_ID_MAX];
+    int  state;
 } feishu_msg_t;
 
 static feishu_msg_t s_msg;
@@ -549,10 +613,17 @@ static void ai_worker_thread(void *arg)
         claw_mutex_lock(s_msg_lock, CLAW_WAIT_FOREVER);
         char text[MSG_TEXT_MAX];
         char chat_id[CHAT_ID_MAX];
+        char msg_id[MSG_ID_MAX];
         memcpy(text, s_msg.text, sizeof(text));
         memcpy(chat_id, s_msg.chat_id, sizeof(chat_id));
-        s_msg.pending = 0;
+        memcpy(msg_id, s_msg.msg_id, sizeof(msg_id));
+        s_msg.state = WORKER_PROCESSING;
         claw_mutex_unlock(s_msg_lock);
+
+        /* React with "Typing" emoji so user knows we're working on it */
+        if (msg_id[0] != '\0') {
+            add_reaction(msg_id, "Typing");
+        }
 
         CLAW_LOGI(TAG, "[%lu ms] ... ai_chat start: \"%s\"",
                   (unsigned long)claw_tick_ms(), text);
@@ -571,6 +642,11 @@ static void ai_worker_thread(void *arg)
                       (unsigned long)claw_tick_ms());
             send_reply(chat_id, "[rt-claw] AI engine error");
         }
+
+        /* Mark idle — now ready to accept new messages */
+        claw_mutex_lock(s_msg_lock, CLAW_WAIT_FOREVER);
+        s_msg.state = WORKER_IDLE;
+        claw_mutex_unlock(s_msg_lock);
     }
 }
 
@@ -622,18 +698,20 @@ static void handle_message_event(cJSON *event)
         return;
     }
 
-    /* Post to worker thread instead of calling ai_chat() here */
+    /* Post to worker thread — only if idle (not pending or processing) */
     claw_mutex_lock(s_msg_lock, CLAW_WAIT_FOREVER);
-    if (s_msg.pending) {
+    if (s_msg.state != WORKER_IDLE) {
         claw_mutex_unlock(s_msg_lock);
-        CLAW_LOGW(TAG, "[%lu ms] !!! worker busy, dropping msg_id=%s",
-                  (unsigned long)claw_tick_ms(), mid);
+        CLAW_LOGW(TAG, "[%lu ms] !!! worker busy (state=%d), "
+                  "dropping msg_id=%s",
+                  (unsigned long)claw_tick_ms(), s_msg.state, mid);
         cJSON_Delete(content);
         return;
     }
     snprintf(s_msg.text, MSG_TEXT_MAX, "%s", user_msg);
     snprintf(s_msg.chat_id, CHAT_ID_MAX, "%s", chat_id->valuestring);
-    s_msg.pending = 1;
+    snprintf(s_msg.msg_id, MSG_ID_MAX, "%s", mid);
+    s_msg.state = WORKER_PENDING;
     claw_mutex_unlock(s_msg_lock);
 
     CLAW_LOGI(TAG, "[%lu ms] --> queued to ai worker",
@@ -666,15 +744,23 @@ static void process_event_payload(const uint8_t *data, int len)
             }
         }
 
-        /* Drop stale events queued before this WS session */
-        uint32_t now = claw_tick_ms();
-        if (s_ws_connect_tick > 0 &&
-            (now - s_ws_connect_tick) < WS_STALE_WINDOW_MS) {
-            CLAW_LOGW(TAG, "[%lu ms] stale event within %dms "
-                      "of ws connect, dropped",
-                      (unsigned long)now, WS_STALE_WINDOW_MS);
-            cJSON_Delete(root);
-            return;
+        /* Drop stale events based on create_time (unix ms) */
+        cJSON *ct = cJSON_GetObjectItem(header, "create_time");
+        if (ct && cJSON_IsString(ct)) {
+            uint64_t ts = parse_u64(ct->valuestring);
+            if (s_latest_event_ts > 0 &&
+                ts + STALE_EVENT_MAX_AGE_MS < s_latest_event_ts) {
+                CLAW_LOGW(TAG, "[%lu ms] stale event "
+                          "(create_time=%llu, latest=%llu), dropped",
+                          (unsigned long)claw_tick_ms(),
+                          (unsigned long long)ts,
+                          (unsigned long long)s_latest_event_ts);
+                cJSON_Delete(root);
+                return;
+            }
+            if (ts > s_latest_event_ts) {
+                s_latest_event_ts = ts;
+            }
         }
 
         cJSON *event_type = cJSON_GetObjectItem(header, "event_type");
@@ -710,7 +796,6 @@ static void ws_event_handler(void *arg, esp_event_base_t base,
     case WEBSOCKET_EVENT_CONNECTED:
         CLAW_LOGI(TAG, "ws connected");
         s_ws_connected = 1;
-        s_ws_connect_tick = claw_tick_ms();
         break;
 
     case WEBSOCKET_EVENT_DISCONNECTED:
