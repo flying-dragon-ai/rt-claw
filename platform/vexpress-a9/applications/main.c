@@ -8,10 +8,12 @@
 #include <rtthread.h>
 #include "osal/claw_os.h"
 #include "claw/claw_init.h"
+#include "claw_board.h"
 
 int main(void)
 {
     claw_log_set_enabled(1);
+    board_early_init();
     claw_init();
     return 0;
 }

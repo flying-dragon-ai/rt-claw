@@ -11,6 +11,12 @@ for d in os.listdir(cwd):
     if os.path.isfile(os.path.join(path, 'SConscript')):
         objs = objs + SConscript(os.path.join(d, 'SConscript'))
 
+# Board implementation
+board_src = [os.path.join(cwd, 'boards', 'qemu', 'board.c')]
+group = DefineGroup('Board', board_src, depend = [''],
+    CPPPATH = [os.path.join(project_root, 'include')])
+objs = objs + group
+
 # rt-claw headers (unified include/ directory)
 claw_inc = [
     os.path.join(project_root, 'include'),
