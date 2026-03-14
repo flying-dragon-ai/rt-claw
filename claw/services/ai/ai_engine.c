@@ -49,7 +49,7 @@ static char s_model[AI_MODEL_MAX];
 #else
 #define RESP_BUF_SIZE      4096
 #endif
-#define MAX_TOOL_ROUNDS    5
+#define MAX_TOOL_ROUNDS    3
 #define API_MAX_RETRIES    2
 #define API_RETRY_BASE_MS  2000
 
@@ -364,6 +364,18 @@ static cJSON *execute_tool_calls(const cJSON *content)
 
         char *result_str = cJSON_PrintUnformatted(result_obj);
         cJSON_Delete(result_obj);
+
+        /*
+         * Truncate tool results to save memory.  HTTP responses
+         * can be tens of KB; the LLM only needs a summary.
+         * Keep first 1500 bytes which is enough context.
+         */
+#define TOOL_RESULT_MAX 1500
+        if (result_str && strlen(result_str) > TOOL_RESULT_MAX) {
+            result_str[TOOL_RESULT_MAX] = '\0';
+            CLAW_LOGD(TAG, "tool result truncated to %d bytes",
+                      TOOL_RESULT_MAX);
+        }
 
         cJSON *tr = cJSON_CreateObject();
         cJSON_AddStringToObject(tr, "type", "tool_result");
