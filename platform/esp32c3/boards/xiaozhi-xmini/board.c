@@ -73,11 +73,14 @@ void board_early_init(void)
         ssd1306_write_line(1, "  xmini-c3");
     }
 
-    /* Initialize ES8311 audio codec on shared bus */
-    if (es8311_audio_init(i2c_bus, PA_PIN) == 0) {
-        s_audio_ready = 1;
-        /* Boot beep: short 1kHz tone */
-        es8311_audio_beep(1000, 100, 50);
+    /* Probe ES8311 before init — skip if chip not present */
+    if (i2c_master_probe(i2c_bus, 0x18, 1000) == ESP_OK) {
+        if (es8311_audio_init(i2c_bus, PA_PIN) == 0) {
+            s_audio_ready = 1;
+            es8311_audio_beep(1000, 100, 50);
+        }
+    } else {
+        ESP_LOGW(TAG, "ES8311 not found at 0x18, audio disabled");
     }
 #endif
 }
