@@ -369,7 +369,7 @@ Ordered by value / effort ratio. Each item is independent.
 | 3 | Dual-core binding (S3) | Config only | Isolate network from app, reduce jitter | Done |
 | 4 | Swarm capability bitmap | ~20 lines | Nodes know each other's hardware | Done |
 | 5 | Scheduler persistence | ~60 lines | Restore AI automations across reboots | Done |
-| 6 | Swarm remote tool invocation | ~150 lines | One node's tools = entire swarm's tools | |
+| 6 | Swarm remote tool invocation | ~150 lines | One node's tools = entire swarm's tools | Done |
 | 7 | Event journal layer | ~80 lines | Heartbeat patrol gets historical context | |
 | 8 | Distributed perception | ~100 lines | Multi-node sensor data convergence | |
 | 9 | Multi-LLM format (opt.) | ~100 lines | Direct connect to OpenAI-compatible APIs | |

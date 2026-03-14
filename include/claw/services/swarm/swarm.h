@@ -49,10 +49,52 @@ struct __attribute__((packed)) swarm_heartbeat {
 #define SWARM_CAP_AI        (1 << 5)  /* AI engine available */
 #define SWARM_CAP_INTERNET  (1 << 6)  /* external network */
 
+/* --- Remote tool invocation (RPC) --- */
+
+#define SWARM_RPC_MAGIC         0x52504321  /* "RPC!" */
+#define SWARM_RPC_PAYLOAD_MAX   188
+#define SWARM_RPC_TOOL_NAME_MAX 32
+#define SWARM_RPC_TIMEOUT_MS    5000
+
+enum swarm_rpc_type {
+    SWARM_RPC_REQUEST  = 0,
+    SWARM_RPC_RESPONSE = 1,
+};
+
+enum swarm_rpc_status {
+    SWARM_RPC_OK        = 0,
+    SWARM_RPC_NOT_FOUND = 1,
+    SWARM_RPC_ERROR     = 2,
+};
+
+struct __attribute__((packed)) swarm_rpc_msg {
+    uint32_t magic;
+    uint32_t src_node;
+    uint32_t dst_node;
+    uint16_t seq;
+    uint8_t  type;       /* enum swarm_rpc_type */
+    uint8_t  status;     /* enum swarm_rpc_status (response only) */
+    char     tool_name[SWARM_RPC_TOOL_NAME_MAX];
+    char     payload[SWARM_RPC_PAYLOAD_MAX];
+};
+
 int  swarm_init(void);
 int  swarm_start(void);
 uint32_t swarm_self_id(void);
 int  swarm_node_count(void);
 void swarm_list_nodes(void);
+
+/**
+ * Execute a tool on a remote swarm node.
+ * Blocks up to SWARM_RPC_TIMEOUT_MS waiting for the response.
+ *
+ * @param tool_name  Tool to invoke (e.g. "gpio_set")
+ * @param params     JSON parameters string
+ * @param result     Output buffer for JSON result
+ * @param result_sz  Size of result buffer
+ * @return CLAW_OK on success, CLAW_ERROR on timeout or no capable node
+ */
+int swarm_rpc_call(const char *tool_name, const char *params,
+                   char *result, size_t result_sz);
 
 #endif /* CLAW_SERVICES_SWARM_H */

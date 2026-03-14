@@ -305,11 +305,46 @@ static cJSON *execute_tool_calls(const cJSON *content)
 
         if (tool) {
             tool->execute(input, result_obj);
-        } else {
+        }
+#ifdef CONFIG_RTCLAW_SWARM_ENABLE
+        else {
+            /*
+             * Tool not available locally — try remote execution
+             * via swarm RPC.  The swarm picks a peer node that
+             * advertises the matching capability bit.
+             */
+            char *params_str = cJSON_PrintUnformatted(input);
+            char remote_buf[SWARM_RPC_PAYLOAD_MAX];
+            if (swarm_rpc_call(tool_name,
+                               params_str ? params_str : "{}",
+                               remote_buf,
+                               sizeof(remote_buf)) == CLAW_OK) {
+                cJSON *parsed = cJSON_Parse(remote_buf);
+                if (parsed) {
+                    cJSON_Delete(result_obj);
+                    result_obj = parsed;
+                } else {
+                    cJSON_AddStringToObject(result_obj, "result",
+                                            remote_buf);
+                }
+                CLAW_LOGI(TAG, "remote tool ok: %s", tool_name);
+            } else {
+                cJSON_AddStringToObject(result_obj, "error",
+                                        "tool not available "
+                                        "(local or swarm)");
+                CLAW_LOGE(TAG, "tool not found: %s", tool_name);
+            }
+            if (params_str) {
+                cJSON_free(params_str);
+            }
+        }
+#else
+        else {
             cJSON_AddStringToObject(result_obj, "error",
                                     "tool not found");
             CLAW_LOGE(TAG, "unknown tool: %s", tool_name);
         }
+#endif
 
         char *result_str = cJSON_PrintUnformatted(result_obj);
         cJSON_Delete(result_obj);

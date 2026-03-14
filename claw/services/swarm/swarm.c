@@ -9,6 +9,7 @@
 #include "claw/claw_config.h"
 #include "osal/claw_net.h"
 #include "claw/services/swarm/swarm.h"
+#include "claw/tools/claw_tools.h"
 #ifdef CONFIG_RTCLAW_HEARTBEAT_ENABLE
 #include "claw/core/heartbeat.h"
 #endif
@@ -66,6 +67,25 @@ static uint32_t generate_node_id(void)
 
 static int s_sock = -1;
 static claw_timer_t s_hb_timer;
+
+/* --- RPC state --- */
+static claw_sem_t   s_rpc_sem;
+static claw_mutex_t s_rpc_lock;
+static uint16_t     s_rpc_seq;
+static uint16_t     s_rpc_pending_seq;
+static char         s_rpc_result[SWARM_RPC_PAYLOAD_MAX];
+static uint8_t      s_rpc_status;
+
+static uint8_t tool_name_to_cap(const char *name)
+{
+    if (strncmp(name, "gpio_", 5) == 0) {
+        return SWARM_CAP_GPIO;
+    }
+    if (strncmp(name, "lcd_", 4) == 0) {
+        return SWARM_CAP_LCD;
+    }
+    return SWARM_CAP_AI;
+}
 
 static void notify_node_event(uint32_t node_id, int joined)
 {
@@ -183,51 +203,224 @@ static void heartbeat_timer_cb(void *arg)
     check_timeouts();
 }
 
+static void send_rpc_to(const struct sockaddr_in *dest,
+                        const struct swarm_rpc_msg *msg)
+{
+    sendto(s_sock, msg, sizeof(*msg), 0,
+           (const struct sockaddr *)dest, sizeof(*dest));
+}
+
+static void handle_rpc_request(const struct swarm_rpc_msg *req,
+                               const struct sockaddr_in *src)
+{
+    struct swarm_rpc_msg resp;
+    memset(&resp, 0, sizeof(resp));
+    resp.magic    = SWARM_RPC_MAGIC;
+    resp.src_node = s_self_id;
+    resp.dst_node = req->src_node;
+    resp.seq      = req->seq;
+    resp.type     = SWARM_RPC_RESPONSE;
+    snprintf(resp.tool_name, sizeof(resp.tool_name),
+             "%s", req->tool_name);
+
+    const claw_tool_t *tool = claw_tool_find(req->tool_name);
+    if (!tool) {
+        resp.status = SWARM_RPC_NOT_FOUND;
+        snprintf(resp.payload, sizeof(resp.payload),
+                 "{\"error\":\"tool not found on this node\"}");
+    } else {
+        cJSON *params = cJSON_Parse(req->payload);
+        cJSON *result = cJSON_CreateObject();
+
+        int rc = tool->execute(params ? params : cJSON_CreateObject(),
+                               result);
+        resp.status = (rc == CLAW_OK) ? SWARM_RPC_OK : SWARM_RPC_ERROR;
+
+        char *rs = cJSON_PrintUnformatted(result);
+        if (rs) {
+            snprintf(resp.payload, sizeof(resp.payload), "%s", rs);
+            cJSON_free(rs);
+        }
+        cJSON_Delete(result);
+        if (params) {
+            cJSON_Delete(params);
+        }
+    }
+
+    CLAW_LOGI(TAG, "rpc exec: %s -> status=%d", req->tool_name,
+              resp.status);
+    send_rpc_to(src, &resp);
+}
+
+static void handle_rpc_response(const struct swarm_rpc_msg *resp)
+{
+    claw_mutex_lock(s_rpc_lock, CLAW_WAIT_FOREVER);
+    if (resp->seq == s_rpc_pending_seq) {
+        s_rpc_status = resp->status;
+        snprintf(s_rpc_result, sizeof(s_rpc_result),
+                 "%s", resp->payload);
+        claw_sem_give(s_rpc_sem);
+    }
+    claw_mutex_unlock(s_rpc_lock);
+}
+
+/*
+ * Unified receiver — dispatch by magic number.
+ * Buffer is large enough for the biggest message type (RPC).
+ */
 static void receiver_thread(void *arg)
 {
     (void)arg;
-    struct swarm_heartbeat hb;
+    uint8_t buf[sizeof(struct swarm_rpc_msg)];
     struct sockaddr_in src;
     socklen_t src_len;
 
     while (1) {
         src_len = sizeof(src);
-        int n = recvfrom(s_sock, &hb, sizeof(hb), 0,
+        int n = recvfrom(s_sock, buf, sizeof(buf), 0,
                          (struct sockaddr *)&src, &src_len);
-
-        if (n != sizeof(hb) || hb.magic != SWARM_HEARTBEAT_MAGIC) {
+        if (n < 4) {
             continue;
         }
 
-        if (hb.node_id == s_self_id) {
-            continue;
-        }
+        uint32_t magic;
+        memcpy(&magic, buf, 4);
 
-        claw_mutex_lock(swarm_lock, CLAW_WAIT_FOREVER);
+        if (magic == SWARM_HEARTBEAT_MAGIC &&
+            n == (int)sizeof(struct swarm_heartbeat)) {
+            struct swarm_heartbeat hb;
+            memcpy(&hb, buf, sizeof(hb));
 
-        int idx = find_or_add_node(hb.node_id);
-        if (idx >= 0) {
-            int is_new = (nodes[idx].last_seen == 0);
-            nodes[idx].last_seen = claw_tick_ms();
-            nodes[idx].ip_addr = ntohl(src.sin_addr.s_addr);
-            nodes[idx].port = ntohs(hb.port);
-            nodes[idx].capabilities = hb.capabilities;
-            nodes[idx].load = hb.load;
-            nodes[idx].uptime_s = hb.uptime_s;
+            if (hb.node_id == s_self_id) {
+                continue;
+            }
 
-            if (is_new) {
-                CLAW_LOGI(TAG, "node 0x%08x joined from %s",
-                          (unsigned)hb.node_id, inet_ntoa(src.sin_addr));
-                notify_node_event(hb.node_id, 1);
+            claw_mutex_lock(swarm_lock, CLAW_WAIT_FOREVER);
+            int idx = find_or_add_node(hb.node_id);
+            if (idx >= 0) {
+                int is_new = (nodes[idx].last_seen == 0);
+                nodes[idx].last_seen = claw_tick_ms();
+                nodes[idx].ip_addr = ntohl(src.sin_addr.s_addr);
+                nodes[idx].port = ntohs(hb.port);
+                nodes[idx].capabilities = hb.capabilities;
+                nodes[idx].load = hb.load;
+                nodes[idx].uptime_s = hb.uptime_s;
+
+                if (is_new) {
+                    CLAW_LOGI(TAG, "node 0x%08x joined from %s",
+                              (unsigned)hb.node_id,
+                              inet_ntoa(src.sin_addr));
+                    notify_node_event(hb.node_id, 1);
+                }
+            }
+            claw_mutex_unlock(swarm_lock);
+        } else if (magic == SWARM_RPC_MAGIC &&
+                   n == (int)sizeof(struct swarm_rpc_msg)) {
+            struct swarm_rpc_msg rpc;
+            memcpy(&rpc, buf, sizeof(rpc));
+
+            if (rpc.dst_node != 0 && rpc.dst_node != s_self_id) {
+                continue;
+            }
+
+            if (rpc.type == SWARM_RPC_REQUEST) {
+                handle_rpc_request(&rpc, &src);
+            } else if (rpc.type == SWARM_RPC_RESPONSE) {
+                handle_rpc_response(&rpc);
             }
         }
-
-        claw_mutex_unlock(swarm_lock);
     }
+}
+
+int swarm_rpc_call(const char *tool_name, const char *params,
+                   char *result, size_t result_sz)
+{
+    if (!tool_name || !result || result_sz == 0) {
+        return CLAW_ERROR;
+    }
+    if (s_sock < 0) {
+        return CLAW_ERROR;
+    }
+
+    uint8_t cap = tool_name_to_cap(tool_name);
+
+    /* Find a capable online node */
+    claw_mutex_lock(swarm_lock, CLAW_WAIT_FOREVER);
+    uint32_t target_id = 0;
+    uint32_t target_ip = 0;
+    uint16_t target_port = 0;
+    for (int i = 0; i < CLAW_SWARM_MAX_NODES; i++) {
+        if (nodes[i].state != SWARM_NODE_ONLINE) {
+            continue;
+        }
+        if (nodes[i].id == s_self_id) {
+            continue;
+        }
+        if (nodes[i].capabilities & cap) {
+            target_id   = nodes[i].id;
+            target_ip   = nodes[i].ip_addr;
+            target_port = nodes[i].port;
+            break;
+        }
+    }
+    claw_mutex_unlock(swarm_lock);
+
+    if (target_id == 0) {
+        CLAW_LOGD(TAG, "rpc: no node with cap 0x%02x for %s",
+                  cap, tool_name);
+        return CLAW_ERROR;
+    }
+
+    /* Build and send RPC request */
+    struct swarm_rpc_msg req;
+    memset(&req, 0, sizeof(req));
+    req.magic    = SWARM_RPC_MAGIC;
+    req.src_node = s_self_id;
+    req.dst_node = target_id;
+    req.type     = SWARM_RPC_REQUEST;
+    snprintf(req.tool_name, sizeof(req.tool_name), "%s", tool_name);
+    if (params) {
+        snprintf(req.payload, sizeof(req.payload), "%s", params);
+    }
+
+    claw_mutex_lock(s_rpc_lock, CLAW_WAIT_FOREVER);
+    s_rpc_seq++;
+    req.seq = s_rpc_seq;
+    s_rpc_pending_seq = s_rpc_seq;
+    s_rpc_result[0] = '\0';
+    s_rpc_status = SWARM_RPC_ERROR;
+    claw_mutex_unlock(s_rpc_lock);
+
+    struct sockaddr_in dest;
+    memset(&dest, 0, sizeof(dest));
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(target_port);
+    dest.sin_addr.s_addr = htonl(target_ip);
+
+    CLAW_LOGI(TAG, "rpc: %s -> node 0x%08x",
+              tool_name, (unsigned)target_id);
+    send_rpc_to(&dest, &req);
+
+    /* Wait for response */
+    if (claw_sem_take(s_rpc_sem, SWARM_RPC_TIMEOUT_MS) != CLAW_OK) {
+        CLAW_LOGW(TAG, "rpc timeout: %s", tool_name);
+        return CLAW_ERROR;
+    }
+
+    claw_mutex_lock(s_rpc_lock, CLAW_WAIT_FOREVER);
+    snprintf(result, result_sz, "%s", s_rpc_result);
+    int ok = (s_rpc_status == SWARM_RPC_OK);
+    claw_mutex_unlock(s_rpc_lock);
+
+    return ok ? CLAW_OK : CLAW_ERROR;
 }
 
 int swarm_start(void)
 {
+    s_rpc_sem = claw_sem_create("rpc", 0);
+    s_rpc_lock = claw_mutex_create("rpc");
+    s_rpc_seq = 0;
+
     s_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (s_sock < 0) {
         CLAW_LOGE(TAG, "socket create failed");
@@ -291,6 +484,16 @@ int swarm_start(void)
 {
     CLAW_LOGI(TAG, "heartbeat not available on this platform");
     return CLAW_OK;
+}
+
+int swarm_rpc_call(const char *tool_name, const char *params,
+                   char *result, size_t result_sz)
+{
+    (void)tool_name;
+    (void)params;
+    (void)result;
+    (void)result_sz;
+    return CLAW_ERROR;
 }
 
 #endif
