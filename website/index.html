@@ -460,6 +460,12 @@
             transition: background 0.2s;
         }
         .serial-input-bar button:hover { background: rgba(245, 158, 11, 0.1); }
+        .serial-msg-success { color: #4ade80; }
+        .serial-msg-error { color: #f87171; }
+        .serial-msg-warning { color: #fbbf24; }
+        .serial-msg-info { color: #94a3b8; }
+        .serial-ansi-bold { font-weight: bold; }
+        .serial-ansi-dim { opacity: 0.6; }
 
         /* Community */
         .community-links { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
@@ -1132,14 +1138,158 @@ var serialPort = null;
 var serialReader = null;
 var serialWriter = null;
 var serialKeepReading = false;
+var serialMaxNodes = 8000;
+var serialAnsiPartial = '';
 
 var serialOutput = document.getElementById('serial-output');
 var serialInput = document.getElementById('serial-input');
 var serialConnectBtn = document.getElementById('serial-connect-btn');
 var serialStatus = document.getElementById('serial-status');
 
-function serialLog(text) {
-    serialOutput.textContent += text;
+/* ANSI standard color palette (dark terminal) */
+var ANSI_COLORS = [
+    '#1e1e1e', '#f87171', '#4ade80', '#facc15',
+    '#60a5fa', '#c084fc', '#22d3ee', '#d4d4d4'
+];
+var ANSI_BRIGHT = [
+    '#666666', '#fca5a5', '#86efac', '#fde68a',
+    '#93c5fd', '#d8b4fe', '#67e8f9', '#ffffff'
+];
+
+var ansiState = { fg: null, bg: null, bold: false, dim: false };
+
+function ansiResetState() {
+    ansiState = { fg: null, bg: null, bold: false, dim: false };
+}
+
+function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* Parse ANSI SGR codes and apply to state */
+function ansiApplySgr(params) {
+    var i = 0;
+    while (i < params.length) {
+        var p = params[i];
+        if (p === 0) { ansiResetState(); }
+        else if (p === 1) { ansiState.bold = true; }
+        else if (p === 2) { ansiState.dim = true; }
+        else if (p === 22) { ansiState.bold = false; ansiState.dim = false; }
+        else if (p >= 30 && p <= 37) {
+            ansiState.fg = ansiState.bold ? ANSI_BRIGHT[p - 30] : ANSI_COLORS[p - 30];
+        }
+        else if (p === 39) { ansiState.fg = null; }
+        else if (p >= 40 && p <= 47) { ansiState.bg = ANSI_COLORS[p - 40]; }
+        else if (p === 49) { ansiState.bg = null; }
+        else if (p >= 90 && p <= 97) { ansiState.fg = ANSI_BRIGHT[p - 90]; }
+        else if (p >= 100 && p <= 107) { ansiState.bg = ANSI_BRIGHT[p - 100]; }
+        else if (p === 38 && params[i + 1] === 5 && i + 2 < params.length) {
+            ansiState.fg = ansi256Color(params[i + 2]); i += 2;
+        }
+        else if (p === 48 && params[i + 1] === 5 && i + 2 < params.length) {
+            ansiState.bg = ansi256Color(params[i + 2]); i += 2;
+        }
+        else if (p === 38 && params[i + 1] === 2 && i + 4 < params.length) {
+            ansiState.fg = 'rgb(' + params[i+2] + ',' + params[i+3] + ',' + params[i+4] + ')'; i += 4;
+        }
+        else if (p === 48 && params[i + 1] === 2 && i + 4 < params.length) {
+            ansiState.bg = 'rgb(' + params[i+2] + ',' + params[i+3] + ',' + params[i+4] + ')'; i += 4;
+        }
+        i++;
+    }
+}
+
+/* 256-color lookup */
+function ansi256Color(n) {
+    if (n < 8) return ANSI_COLORS[n];
+    if (n < 16) return ANSI_BRIGHT[n - 8];
+    if (n < 232) {
+        var idx = n - 16;
+        var r = Math.floor(idx / 36); var g = Math.floor((idx % 36) / 6); var b = idx % 6;
+        return 'rgb(' + (r ? r * 40 + 55 : 0) + ',' + (g ? g * 40 + 55 : 0) + ',' + (b ? b * 40 + 55 : 0) + ')';
+    }
+    var v = (n - 232) * 10 + 8;
+    return 'rgb(' + v + ',' + v + ',' + v + ')';
+}
+
+/* Build inline style string from current ANSI state */
+function ansiBuildStyle() {
+    var parts = [];
+    if (ansiState.fg) parts.push('color:' + ansiState.fg);
+    if (ansiState.bg) parts.push('background:' + ansiState.bg);
+    if (ansiState.bold) parts.push('font-weight:bold');
+    if (ansiState.dim) parts.push('opacity:0.6');
+    return parts.join(';');
+}
+
+/* Append ANSI-parsed text as DOM nodes to serial output */
+function serialAppendAnsi(rawText) {
+    var text = serialAnsiPartial + rawText;
+    serialAnsiPartial = '';
+
+    /* Buffer incomplete escape at end */
+    var trailMatch = text.match(/\x1b(\[[\d;]*)?$/);
+    if (trailMatch) {
+        serialAnsiPartial = trailMatch[0];
+        text = text.substring(0, text.length - trailMatch[0].length);
+    }
+
+    var frag = document.createDocumentFragment();
+    /* Split by ANSI CSI SGR: \x1b[ ... m */
+    var re = /\x1b\[([\d;]*)m/g;
+    var last = 0;
+    var match;
+
+    while ((match = re.exec(text)) !== null) {
+        /* Text before this escape */
+        if (match.index > last) {
+            var seg = text.substring(last, match.index);
+            seg = seg.replace(/\x1b\[[^m]*[A-Za-z]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+            if (seg) {
+                var span = document.createElement('span');
+                var style = ansiBuildStyle();
+                if (style) span.setAttribute('style', style);
+                span.textContent = seg;
+                frag.appendChild(span);
+            }
+        }
+        /* Apply SGR params */
+        var params = match[1] ? match[1].split(';').map(Number) : [0];
+        ansiApplySgr(params);
+        last = re.lastIndex;
+    }
+    /* Remaining text after last escape */
+    if (last < text.length) {
+        var tail = text.substring(last);
+        tail = tail.replace(/\x1b\[[^m]*[A-Za-z]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+        if (tail) {
+            var span2 = document.createElement('span');
+            var style2 = ansiBuildStyle();
+            if (style2) span2.setAttribute('style', style2);
+            span2.textContent = tail;
+            frag.appendChild(span2);
+        }
+    }
+
+    serialOutput.appendChild(frag);
+    serialTrimOutput();
+    serialOutput.scrollTop = serialOutput.scrollHeight;
+}
+
+/* Keep DOM node count bounded */
+function serialTrimOutput() {
+    while (serialOutput.childNodes.length > serialMaxNodes) {
+        serialOutput.removeChild(serialOutput.firstChild);
+    }
+}
+
+/* Append a styled system message */
+function serialLogMsg(text, cls) {
+    var span = document.createElement('span');
+    span.className = cls;
+    span.textContent = text;
+    serialOutput.appendChild(span);
+    serialTrimOutput();
     serialOutput.scrollTop = serialOutput.scrollHeight;
 }
 
@@ -1153,7 +1303,7 @@ function serialToggle() {
 
 async function serialConnect() {
     if (!navigator.serial) {
-        serialLog('\n[Error] Web Serial not supported.\n');
+        serialLogMsg('\n[Error] Web Serial not supported.\n', 'serial-msg-error');
         return;
     }
     try {
@@ -1164,13 +1314,15 @@ async function serialConnect() {
         serialConnectBtn.textContent = 'Disconnect';
         serialConnectBtn.classList.add('active');
         serialStatus.classList.add('connected');
-        serialOutput.textContent = '';
-        serialLog('[Connected] ' + baud + ' baud\n');
+        serialOutput.innerHTML = '';
+        ansiResetState();
+        serialAnsiPartial = '';
+        serialLogMsg('[Connected] ' + baud + ' baud\n', 'serial-msg-success');
         serialKeepReading = true;
         serialReadLoop();
     } catch (e) {
         if (e.name !== 'NotFoundError') {
-            serialLog('\n[Error] ' + e.message + '\n');
+            serialLogMsg('\n[Error] ' + e.message + '\n', 'serial-msg-error');
         }
     }
 }
@@ -1182,10 +1334,12 @@ async function serialReadLoop() {
             while (true) {
                 var result = await serialReader.read();
                 if (result.done) break;
-                serialLog(new TextDecoder().decode(result.value));
+                serialAppendAnsi(new TextDecoder().decode(result.value));
             }
         } catch (e) {
-            if (serialKeepReading) serialLog('\n[Read error] ' + e.message + '\n');
+            if (serialKeepReading) {
+                serialLogMsg('\n[Read error] ' + e.message + '\n', 'serial-msg-error');
+            }
         } finally {
             serialReader.releaseLock();
             serialReader = null;
@@ -1203,7 +1357,7 @@ async function serialDisconnect() {
     serialConnectBtn.textContent = 'Connect';
     serialConnectBtn.classList.remove('active');
     serialStatus.classList.remove('connected');
-    serialLog('\n[Disconnected]\n');
+    serialLogMsg('\n[Disconnected]\n', 'serial-msg-warning');
 }
 
 async function serialSend() {
@@ -1214,7 +1368,7 @@ async function serialSend() {
         await serialWriter.write(new TextEncoder().encode(text + '\n'));
         serialInput.value = '';
     } catch (e) {
-        serialLog('\n[Send error] ' + e.message + '\n');
+        serialLogMsg('\n[Send error] ' + e.message + '\n', 'serial-msg-error');
     }
 }
 
@@ -1224,14 +1378,19 @@ async function serialReset() {
         await serialPort.setSignals({ dataTerminalReady: false });
         await new Promise(function(r) { setTimeout(r, 100); });
         await serialPort.setSignals({ dataTerminalReady: true });
-        serialLog('\n[Reset] DTR toggled\n');
+        serialLogMsg('\n[Reset] DTR toggled\n', 'serial-msg-info');
     } catch (e) {
-        serialLog('\n[Reset error] ' + e.message + '\n');
+        serialLogMsg('\n[Reset error] ' + e.message + '\n', 'serial-msg-error');
     }
 }
 
 function serialClear() {
-    serialOutput.textContent = serialPort ? '' : 'Click "Connect" to open a serial port...';
+    serialOutput.innerHTML = '';
+    ansiResetState();
+    serialAnsiPartial = '';
+    if (!serialPort) {
+        serialOutput.textContent = 'Click "Connect" to open a serial port...';
+    }
 }
 </script>
 
