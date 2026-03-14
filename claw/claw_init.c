@@ -4,7 +4,7 @@
  */
 
 #include "osal/claw_os.h"
-#include "claw/claw_config.h"
+#include "claw_config.h"
 #include "claw/claw_init.h"
 #include "claw/core/claw_service.h"
 #include "claw/core/gateway.h"

@@ -55,12 +55,12 @@ if get_option('heartbeat')
 endif
 
 rtclaw_lib = static_library('rtclaw', src_files,
-    include_directories: [claw_inc] + platform_incs,
+    include_directories: [claw_root_inc, claw_inc] + platform_incs,
     dependencies: [osal_dep, cjson_dep],
     c_args: feature_defs,
 )
 
 rtclaw_dep = declare_dependency(
     link_with: rtclaw_lib,
-    include_directories: claw_inc,
+    include_directories: [claw_root_inc, claw_inc],
 )

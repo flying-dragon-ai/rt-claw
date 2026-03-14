@@ -9,7 +9,7 @@
 #define CLAW_SCHEDULER_H
 
 #include "osal/claw_os.h"
-#include "claw/claw_config.h"
+#include "claw_config.h"
 
 typedef void (*sched_callback_t)(void *arg);
 

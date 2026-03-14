@@ -9,7 +9,7 @@
 #define CLAW_SERVICES_SWARM_H
 
 #include "osal/claw_os.h"
-#include "claw/claw_config.h"
+#include "claw_config.h"
 
 enum swarm_node_state {
     SWARM_NODE_OFFLINE = 0,

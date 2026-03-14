@@ -4,7 +4,7 @@
  */
 
 #include "claw/tools/claw_tools.h"
-#include "claw/claw_config.h"
+#include "claw_config.h"
 #ifdef CONFIG_RTCLAW_SKILL_ENABLE
 #include "claw/services/ai/ai_skill.h"
 #endif

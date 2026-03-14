@@ -6,7 +6,7 @@
  */
 
 #include "claw/tools/claw_tools.h"
-#include "claw/claw_config.h"
+#include "claw_config.h"
 
 #include <string.h>
 #include <stdio.h>

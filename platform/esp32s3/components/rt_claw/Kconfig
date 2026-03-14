@@ -1,48 +1,7 @@
 menu "rt-claw Configuration"
 
-    menu "AI Engine"
-
-        config RTCLAW_AI_API_KEY
-            string "LLM API Key"
-            default ""
-            help
-                API key for LLM service (e.g. Claude, DeepSeek).
-                Set via: idf.py menuconfig -> rt-claw -> AI Engine
-
-        config RTCLAW_AI_API_URL
-            string "LLM API endpoint URL"
-            default "https://api.anthropic.com/v1/messages"
-            help
-                Full URL of the chat completion API endpoint.
-
-        config RTCLAW_AI_MODEL
-            string "LLM model name"
-            default "claude-sonnet-4-6"
-            help
-                Model identifier sent in the API request.
-
-        config RTCLAW_AI_MAX_TOKENS
-            int "Max response tokens"
-            default 1024
-            range 64 4096
-
-        config RTCLAW_AI_CONTEXT_SIZE
-            int "AI response buffer size (bytes)"
-            default 8192
-            range 4096 65536
-            help
-                Size of the HTTP response buffer for AI API calls.
-                Larger values allow longer AI responses but use more RAM.
-
-        config RTCLAW_AI_MEMORY_MAX_MSGS
-            int "Max conversation memory messages"
-            default 20
-            range 4 64
-            help
-                Maximum number of messages stored in AI conversation memory.
-                When full, the oldest user+assistant pair is dropped.
-
-    endmenu
+    # AI Engine credentials and tuning are configured at the top level
+    # via Meson options or environment variables.  See claw_config.h.
 
     menu "WiFi"
 
@@ -144,20 +103,8 @@ menu "rt-claw Configuration"
             help
                 Connect to Feishu via WebSocket long connection.
                 Receives user messages and replies through AI engine.
-
-        config RTCLAW_FEISHU_APP_ID
-            string "Feishu App ID"
-            default ""
-            depends on RTCLAW_FEISHU_ENABLE
-            help
-                App ID from Feishu Open Platform (open.feishu.cn).
-
-        config RTCLAW_FEISHU_APP_SECRET
-            string "Feishu App Secret"
-            default ""
-            depends on RTCLAW_FEISHU_ENABLE
-            help
-                App Secret from Feishu Open Platform.
+                Credentials (App ID / Secret) are configured via Meson
+                options or environment variables.  See claw_config.h.
 
     endmenu
 

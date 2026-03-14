@@ -32,19 +32,26 @@ meson setup build/esp32s3-qemu/meson --cross-file build/esp32s3-qemu/cross.ini
 meson compile -C build/esp32s3-qemu/meson
 ```
 
-## Configuration (env vars)
+## Configuration
 
-All platforms support environment variables for credentials (read at build time):
+All rt-claw business config (AI, Feishu, tuning) lives in `claw_config.h` (project root).
+Credentials are set via Meson or environment variables — NOT in vendor SDK configs.
 
 ```bash
+# Environment variables (read at Meson configure time)
 export RTCLAW_AI_API_KEY='sk-...'         # AI API key
 export RTCLAW_AI_API_URL='https://...'    # API endpoint
 export RTCLAW_AI_MODEL='claude-sonnet-4-6'  # Model name
 export RTCLAW_FEISHU_APP_ID='cli_...'     # Feishu App ID
 export RTCLAW_FEISHU_APP_SECRET='...'     # Feishu App Secret
+
+# Or Meson options
+meson configure build/<platform>/meson -Dai_api_key='sk-...'
 ```
 
-Priority: meson option (`-Dai_api_key=...`) > env var > ESP-IDF menuconfig/sdkconfig > `claw_config.h` default.
+Priority: meson option (`-Dai_api_key=...`) > env var (`RTCLAW_AI_API_KEY`) > `claw_config.h` default.
+
+Meson generates `claw_config_generated.h` in the build directory with the resolved values.
 
 ## Run
 
@@ -121,7 +128,7 @@ No unit test framework yet. Verify changes by:
 |------|---------|
 | `Makefile` | Unified build entry point |
 | `meson.build` | Root Meson project (cross-compiles claw/ + osal/) |
-| `meson_options.txt` | Build options (osal backend, feature flags) |
+| `meson_options.txt` | Build options (osal backend, feature flags, AI/Feishu config) |
 | `build/<platform>/` | Build outputs (gitignored) |
 | `include/` | Unified public headers (claw_os.h, claw_net.h, claw_board.h, etc.) |
 | `include/drivers/` | Driver public headers (mirror of drivers/ structure) |
@@ -136,7 +143,8 @@ No unit test framework yet. Verify changes by:
 | `vendor/os/freertos/` | FreeRTOS-Kernel (submodule) |
 | `vendor/os/rt-thread/` | RT-Thread (submodule) |
 | `claw/claw_init.c` | Boot entry point |
-| `include/claw/claw_config.h` | Compile-time constants (platform-independent) |
+| `claw_config.h` | Unified compile-time configuration (project root) |
+| `claw_config_generated.h.in` | Meson template for generated config header |
 | `claw/core/gateway.c` | Message router |
 | `claw/services/{ai,net,swarm,im}/` | Service modules |
 | `claw/tools/` | Tool Use framework |

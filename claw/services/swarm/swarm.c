@@ -6,7 +6,7 @@
  */
 
 #include "osal/claw_os.h"
-#include "claw/claw_config.h"
+#include "claw_config.h"
 #include "osal/claw_net.h"
 #include "claw/services/swarm/swarm.h"
 #include "claw/tools/claw_tools.h"

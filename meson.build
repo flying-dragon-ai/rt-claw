@@ -47,15 +47,16 @@ elif osal_backend == 'freertos'
     platform_defs += ['-DCLAW_PLATFORM_ESP_IDF']
 endif
 
-# Runtime config overrides.
-# Priority: meson option (-Dai_api_key=...) > env var (RTCLAW_*) > claw_config.h default.
+# ---- Unified configuration via claw_config_generated.h ----
 #
-# For ESP-IDF (freertos): env vars are handled by gen-esp32*-cross.py which
-# generates an env_override.h included AFTER sdkconfig.h — no -D conflict.
-# Meson options still work for all platforms via -D flags below.
+# All rt-claw credentials and tunable parameters are configured here,
+# NOT in vendor SDK configs (ESP-IDF Kconfig, RT-Thread rtconfig).
 #
-# Each entry: [env_var_name, config_macro_name]
-_env_overrides = {
+# Priority: meson option (-Dai_api_key=...) > env var (RTCLAW_AI_API_KEY)
+#           > claw_config.h #ifndef default.
+#
+# String config: [meson_option, env_var_name, config_macro_name]
+_str_overrides = {
     'ai_api_key':       ['RTCLAW_AI_API_KEY',       'CONFIG_RTCLAW_AI_API_KEY'],
     'ai_api_url':       ['RTCLAW_AI_API_URL',       'CONFIG_RTCLAW_AI_API_URL'],
     'ai_model':         ['RTCLAW_AI_MODEL',         'CONFIG_RTCLAW_AI_MODEL'],
@@ -63,24 +64,59 @@ _env_overrides = {
     'feishu_app_secret':['RTCLAW_FEISHU_APP_SECRET','CONFIG_RTCLAW_FEISHU_APP_SECRET'],
 }
 
-foreach opt_name, pair : _env_overrides
+# Integer config: [meson_option, env_var_name, config_macro_name]
+_int_overrides = {
+    'ai_max_tokens':      ['RTCLAW_AI_MAX_TOKENS',      'CONFIG_RTCLAW_AI_MAX_TOKENS'],
+    'ai_context_size':    ['RTCLAW_AI_CONTEXT_SIZE',     'CONFIG_RTCLAW_AI_CONTEXT_SIZE'],
+    'ai_memory_max_msgs': ['RTCLAW_AI_MEMORY_MAX_MSGS',  'CONFIG_RTCLAW_AI_MEMORY_MAX_MSGS'],
+}
+
+conf_data = configuration_data()
+_has_any = false
+
+foreach opt_name, pair : _str_overrides
     _val = get_option(opt_name)
     if _val == ''
-        # For freertos (ESP-IDF), env vars are injected via cross.ini
-        # override header; only read env here for non-ESP platforms.
-        if osal_backend != 'freertos'
-            _r = run_command('sh', '-c', 'printf "%s" "${' + pair[0] + ':-}"',
-                             check: false)
-            _val = _r.stdout().strip()
-        endif
+        _r = run_command('sh', '-c',
+            'printf "%s" "${' + pair[0] + ':-}"', check: false)
+        _val = _r.stdout().strip()
     endif
     if _val != ''
-        _macro = pair[1]
-        platform_defs += ['-U' + _macro, '-D' + _macro + '="' + _val + '"']
+        conf_data.set_quoted(pair[1], _val)
+        _has_any = true
     endif
 endforeach
 
-# Unified header directory for all rt-claw public headers
+foreach opt_name, pair : _int_overrides
+    _val = get_option(opt_name)
+    if _val > 0
+        conf_data.set(pair[1], _val)
+        _has_any = true
+    else
+        _r = run_command('sh', '-c',
+            'printf "%s" "${' + pair[0] + ':-}"', check: false)
+        _env = _r.stdout().strip()
+        if _env != ''
+            conf_data.set(pair[1], _env.to_int())
+            _has_any = true
+        endif
+    endif
+endforeach
+
+claw_config_gen = configure_file(
+    input: 'claw_config_generated.h.in',
+    output: 'claw_config_generated.h',
+    configuration: conf_data,
+)
+
+# Tell claw_config.h to include the generated header
+platform_defs += ['-DCLAW_HAS_GENERATED_CONFIG']
+
+# Unified header directories:
+#   - project root: claw_config.h
+#   - include/: all other public headers
+#   - build dir: claw_config_generated.h (added implicitly by Meson)
+claw_root_inc = include_directories('.')
 claw_inc = include_directories('include')
 
 subdir('vendor/lib/cjson')

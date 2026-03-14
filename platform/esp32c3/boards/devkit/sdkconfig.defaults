@@ -56,6 +56,4 @@ CONFIG_RTCLAW_TOOL_SYSTEM=y
 CONFIG_RTCLAW_TOOL_SCHED=y
 CONFIG_RTCLAW_TOOL_NET=y
 
-# ---- AI Engine ----
-CONFIG_RTCLAW_AI_API_URL="https://api.anthropic.com/v1/messages"
-CONFIG_RTCLAW_AI_MODEL="claude-sonnet-4-6"
+# AI Engine credentials and tuning: see claw_config.h + meson options

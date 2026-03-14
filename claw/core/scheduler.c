@@ -6,7 +6,7 @@
  */
 
 #include "osal/claw_os.h"
-#include "claw/claw_config.h"
+#include "claw_config.h"
 #include "claw/core/scheduler.h"
 
 #include <string.h>
