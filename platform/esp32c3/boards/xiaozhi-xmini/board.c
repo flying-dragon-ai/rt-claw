@@ -4,8 +4,10 @@
  *
  * XiaoZhi xmini-c3 board — WiFi + SSD1306 OLED + ES8311 Audio.
  *
- * I2C bus is shared between OLED (0x3C) and ES8311 codec (0x18).
- * Board manages the bus handle and passes it to both drivers.
+ * Supports multiple board revisions:
+ *   V1: I2C SDA=3 SCL=4, PA=11
+ *   V3: I2C SDA=0 SCL=1, PA=10
+ * Auto-detects by probing ES8311 on each I2C bus.
  */
 
 #include "claw_board.h"
@@ -22,21 +24,18 @@
 
 #define TAG "board"
 
-/* I2C pin assignment (shared by OLED + ES8311) */
-#define I2C_SDA_PIN   3
-#define I2C_SCL_PIN   4
+/* Board revision pin configs */
+#define V1_SDA  3
+#define V1_SCL  4
+#define V1_PA   11
 
-/* Power amplifier enable */
-#define PA_PIN        11
+#define V3_SDA  0
+#define V3_SCL  1
+#define V3_PA   10
 
-/*
- * OLED layout (128x64, 8 rows of 8px each):
- *   Row 0: "rt-claw v0.1.0"
- *   Row 1: (blank)
- *   Row 2-5: status / AI response (4 lines)
- *   Row 6: progress bar
- *   Row 7: free heap info
- */
+#define ES8311_ADDR  0x18
+#define SSD1306_ADDR 0x3C
+
 #define STATUS_ROW_START 2
 #define STATUS_ROWS      4
 #define PROGRESS_ROW     6
@@ -44,43 +43,121 @@
 static int s_oled_ready;
 static int s_audio_ready;
 
+#ifdef CLAW_PLATFORM_ESP_IDF
+
+static i2c_master_bus_handle_t create_i2c_bus(int sda, int scl,
+                                               int port)
+{
+    i2c_master_bus_config_t cfg = {
+        .i2c_port = port,
+        .sda_io_num = sda,
+        .scl_io_num = scl,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = 1,
+    };
+    i2c_master_bus_handle_t bus = NULL;
+    esp_err_t err = i2c_new_master_bus(&cfg, &bus);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "I2C bus (SDA=%d SCL=%d) init: %s",
+                 sda, scl, esp_err_to_name(err));
+        return NULL;
+    }
+    return bus;
+}
+
+static void i2c_scan(i2c_master_bus_handle_t bus, const char *label)
+{
+    printf("I2C scan [%s]:", label);
+    int found = 0;
+    for (int addr = 0x08; addr < 0x78; addr++) {
+        if (i2c_master_probe(bus, addr, 100) == ESP_OK) {
+            printf(" 0x%02X", addr);
+            found++;
+        }
+    }
+    if (found == 0) {
+        printf(" (none)");
+    }
+    printf("\n");
+}
+
+#endif /* CLAW_PLATFORM_ESP_IDF */
+
 void board_early_init(void)
 {
     wifi_board_early_init();
 
 #ifdef CLAW_PLATFORM_ESP_IDF
-    /* Create shared I2C bus */
-    i2c_master_bus_config_t bus_cfg = {
-        .i2c_port = I2C_NUM_0,
-        .sda_io_num = I2C_SDA_PIN,
-        .scl_io_num = I2C_SCL_PIN,
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = 1,
-    };
-    i2c_master_bus_handle_t i2c_bus = NULL;
-    esp_err_t err = i2c_new_master_bus(&bus_cfg, &i2c_bus);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "I2C bus init failed: %s",
-                 esp_err_to_name(err));
-        return;
+    /*
+     * Auto-detect board revision by trying both I2C pin configs.
+     * V1: SDA=3 SCL=4, V3: SDA=0 SCL=1.
+     * OLED (0x3C) and ES8311 (0x18) may be on the same or
+     * different buses depending on revision.
+     */
+
+    /* Try V1 pins first (I2C_NUM_0) */
+    i2c_master_bus_handle_t bus0 = create_i2c_bus(V1_SDA, V1_SCL,
+                                                   I2C_NUM_0);
+    int oled_on_v1 = 0;
+    int es8311_on_v1 = 0;
+    int pa_pin = V1_PA;
+
+    if (bus0) {
+        i2c_scan(bus0, "V1 SDA=3 SCL=4");
+        oled_on_v1 = (i2c_master_probe(bus0, SSD1306_ADDR, 200)
+                      == ESP_OK);
+        es8311_on_v1 = (i2c_master_probe(bus0, ES8311_ADDR, 200)
+                        == ESP_OK);
     }
 
-    /* Initialize OLED on shared bus */
-    if (ssd1306_init_on_bus(i2c_bus) == 0) {
-        s_oled_ready = 1;
-        ssd1306_write_line(0, "  rt-claw v0.1.0");
-        ssd1306_write_line(1, "  xmini-c3");
+    i2c_master_bus_handle_t bus_audio = bus0;
+
+    if (!es8311_on_v1) {
+        if (bus0) {
+            i2c_del_master_bus(bus0);
+            bus0 = NULL;
+        }
+        bus0 = create_i2c_bus(V3_SDA, V3_SCL, I2C_NUM_0);
+        if (bus0) {
+            i2c_scan(bus0, "V3 SDA=0 SCL=1");
+            if (i2c_master_probe(bus0, ES8311_ADDR, 200) == ESP_OK) {
+                bus_audio = bus0;
+                pa_pin = V3_PA;
+                printf("Detected V3 board\n");
+            }
+        }
+    } else {
+        printf("Detected V1 board\n");
     }
 
-    /* Probe ES8311 before init — skip if chip not present */
-    if (i2c_master_probe(i2c_bus, 0x18, 1000) == ESP_OK) {
-        if (es8311_audio_init(i2c_bus, PA_PIN) == 0) {
+    /*
+     * Initialize ES8311 BEFORE SSD1306.
+     *
+     * esp_codec_dev's audio_codec_new_i2c_ctrl() registers an
+     * I2C device on the bus.  If SSD1306's esp_lcd_panel_io_i2c
+     * is created first, the two frameworks conflict on the same
+     * bus, causing NACK errors on the codec address.
+     */
+    if (bus_audio &&
+        i2c_master_probe(bus_audio, ES8311_ADDR, 200) == ESP_OK) {
+        if (es8311_audio_init(bus_audio, pa_pin) == 0) {
             s_audio_ready = 1;
             es8311_audio_beep(1000, 100, 50);
         }
     } else {
-        ESP_LOGW(TAG, "ES8311 not found at 0x18, audio disabled");
+        printf("ES8311 not found, audio disabled\n");
+    }
+
+    /* Initialize OLED after ES8311 */
+    if (bus0) {
+        if (ssd1306_init_on_bus(bus0) == 0) {
+            s_oled_ready = 1;
+            ssd1306_write_line(0, "  rt-claw v0.1.0");
+            ssd1306_write_line(1, "  xmini-c3");
+            ssd1306_write_line(2, s_audio_ready
+                               ? "  Audio: OK" : "  Audio: N/A");
+        }
     }
 #endif
 }

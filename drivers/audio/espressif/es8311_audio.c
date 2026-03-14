@@ -22,6 +22,8 @@
 #include "esp_codec_dev.h"
 #include "esp_codec_dev_defaults.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include <string.h>
 #include <math.h>
@@ -35,7 +37,8 @@
 #define I2S_DOUT_PIN    5
 #define I2S_DIN_PIN     7
 
-#define CODEC_I2C_ADDR  0x18
+/* esp_codec_dev uses 8-bit I2C address (7-bit addr << 1) */
+#define CODEC_I2C_ADDR  (0x18 << 1)
 #define SAMPLE_RATE     24000
 #define BITS_PER_SAMPLE 16
 
@@ -103,6 +106,13 @@ int es8311_audio_init(void *i2c_bus, int pa_pin)
     i2s_channel_init_std_mode(rx_handle, &std_cfg);
     i2s_channel_enable(tx_handle);
     i2s_channel_enable(rx_handle);
+
+    /*
+     * ES8311 needs MCLK running before it accepts I2C register
+     * writes (probe ACKs the address but register writes NACK
+     * without clock).  Wait for MCLK to stabilize.
+     */
+    vTaskDelay(pdMS_TO_TICKS(50));
 
     /* Create codec control interface (I2C) */
     audio_codec_i2c_cfg_t i2c_cfg = {
