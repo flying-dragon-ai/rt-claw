@@ -6,6 +6,7 @@ on:
     paths:
       - 'website/**'
       - 'images/**'
+      - 'docs/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
@@ -27,8 +28,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy images to website
-        run: cp -r images/ website/img/
+      - name: Copy images and docs to website
+        run: |
+          cp -r images/ website/img/
+          cp -r docs/ website/docs/
 
       - name: Download ESP32-S3 firmware (if available)
         uses: dawidd6/action-download-artifact@v6
