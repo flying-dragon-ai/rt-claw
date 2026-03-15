@@ -43,19 +43,16 @@ scenario without writing, compiling, or flashing embedded code again.
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| LLM Chat Engine | Interactive conversation with Claude API over HTTP | Done |
-| Tool Use | LLM-driven hardware control (GPIO, system info, LCD, audio, scheduler, HTTP) via function calling; 30+ built-in tools | Done |
-| Skills | Composable multi-tool workflows; AI can create, persist (NVS), and execute skills that orchestrate multiple tools | Done |
-| LCD Graphics | 320x240 RGB565 framebuffer with text, shapes, and drawing primitives; AI agent can draw on screen via tool calls | Done |
-| OLED Display | SSD1306 I2C OLED driver for xiaozhi-xmini board | Done |
-| Audio | ES8311 codec driver with preset sound effects (success, error, notify, alert); AI-controllable volume and beep | Done |
-| Chat-first Shell | UART REPL with insert-mode editing, tab completion, UTF-8 support; direct input goes to AI, /commands for system | Done |
+| LLM Chat Engine | Interactive conversation with LLM API over HTTP | Done |
+| Tool Use | LLM-driven function calling to interact with hardware and services; 30+ built-in tools | Done |
+| Skills | Composable multi-tool workflows; AI can create, persist, and execute skills that orchestrate multiple tools | Done |
+| Conversation Memory | Short-term RAM ring buffer + long-term NVS Flash persistent storage; AI can save/delete/list memories | Done |
+| Swarm Intelligence | Node discovery, heartbeat, capability bitmap, remote tool invocation across nodes | Done |
+| Scheduled Tasks | Timer-driven task execution and periodic automation; AI can create/list/remove tasks | Done |
+| Chat-first Shell | UART REPL with insert-mode editing, tab completion, UTF-8; direct input goes to AI, /commands for system | Done |
 | OSAL | Write once, run on FreeRTOS and RT-Thread with zero code changes | Done |
 | Gateway | Thread-safe message routing between services | Done |
-| Networking | Ethernet + HTTP client on ESP32-C3 QEMU; WiFi on real hardware | Done |
-| Swarm Intelligence | Node discovery, heartbeat, capability bitmap, remote tool invocation across nodes | Done |
-| Conversation Memory | Short-term RAM ring buffer + long-term NVS Flash persistent storage; AI can save/delete/list memories | Done |
-| Scheduled Tasks | Timer-driven task execution and periodic automation; AI can create/list/remove tasks | Done |
+| Networking | Ethernet (QEMU) and WiFi (real hardware); HTTP client for API calls | Done |
 | IM Integrations | Feishu (Lark) via WebSocket long connection; planned: DingTalk, QQ, Telegram | In Progress |
 | Web Flash & Serial | Browser-based firmware flash (esptool-js) and serial terminal with ANSI color rendering | Done |
 | Multi-Model API | Support mainstream LLM APIs: Claude, GPT, Gemini, DeepSeek, GLM, MiniMax, Grok, Moonshot, Baichuan, Qwen, Doubao, Llama (Ollama) | Planned |
@@ -90,11 +87,9 @@ scenario without writing, compiling, or flashing embedded code again.
 
 | Platform | Target | RTOS | Build | Status |
 |----------|--------|------|-------|--------|
-| ESP32-C3 | QEMU (Espressif fork) | ESP-IDF + FreeRTOS | Meson + CMake | AI + Ethernet verified |
-| ESP32-S3 | QEMU (Espressif fork) | ESP-IDF + FreeRTOS | Meson + CMake | AI + Ethernet verified |
-| ESP32-C3 | Real hardware (xiaozhi-xmini) | ESP-IDF + FreeRTOS | Meson + CMake | Verified |
-| ESP32-S3 | Real hardware | ESP-IDF + FreeRTOS | Meson + CMake | Untested |
-| QEMU vexpress-a9 | QEMU | RT-Thread | Meson + SCons | Boot + Ethernet verified |
+| ESP32-C3 | QEMU, xiaozhi-xmini, generic devkit | ESP-IDF + FreeRTOS | Meson + CMake | Verified |
+| ESP32-S3 | QEMU, real hardware | ESP-IDF + FreeRTOS | Meson + CMake | Verified |
+| vexpress-a9 | QEMU | RT-Thread | Meson + SCons | Verified |
 
 > Note: upstream STM32 QEMU boards were evaluated on QEMU 10.2.x but are not
 > listed here yet because Ethernet is still unimplemented there, so rt-claw
