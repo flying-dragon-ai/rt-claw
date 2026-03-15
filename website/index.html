@@ -1234,13 +1234,10 @@ function toggleLang() {
     }
 })();
 
-/* ── GitHub Star Count ── */
+/* ── GitHub Star Count (always fetch, cache for instant display) ── */
 (function() {
     var cached = sessionStorage.getItem('rtclaw-stars');
-    if (cached !== null) {
-        updateStarBadges(cached);
-        return;
-    }
+    if (cached !== null) updateStarBadges(cached);
     fetch('https://api.github.com/repos/zevorn/rt-claw')
         .then(function(r) { return r.json(); })
         .then(function(data) {
