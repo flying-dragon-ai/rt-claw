@@ -73,12 +73,12 @@ scenario without writing, compiling, or flashing embedded code again.
 |            (one skill composes multiple tools)               |
 +--------------------------------------------------------------+
 |                     tools (Tool Use)                         |
-| gpio | system | lcd | audio | http | scheduler | memory     |
+| gpio | system | lcd | audio | http | scheduler | memory      |
 +--------------------------------------------------------------+
 |                   drivers (Hardware BSP)                     |
 | WiFi | ES8311 | SSD1306 | serial | LCD framebuffer           |
 +--------------------------------------------------------------+
-|               osal/claw_os.h  (OSAL API)                    |
+|               osal/claw_os.h  (OSAL API)                     |
 +-------------------+------------------------------------------+
 | FreeRTOS (IDF)    |             RT-Thread                    |
 +-------------------+------------------------------------------+
