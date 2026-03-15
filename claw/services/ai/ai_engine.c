@@ -57,6 +57,12 @@ static claw_mutex_t s_api_lock;
 static ai_status_cb_t s_status_cb;
 static char s_channel_hint[512];
 
+/*
+ * API format: 0 = Claude (Anthropic), 1 = OpenAI-compatible.
+ * Auto-detected from model name in ai_engine_init().
+ */
+static int s_openai_compat;
+
 static inline void notify_status(int st, const char *detail)
 {
     if (s_status_cb) {
@@ -104,11 +110,30 @@ static cJSON *do_api_call(cJSON *req_body)
         return NULL;
     }
 
-    claw_net_header_t headers[] = {
+    /* OpenAI: "Authorization: Bearer sk-..." */
+    static char s_auth_bearer[AI_KEY_MAX + 8];
+    int hdr_count;
+    claw_net_header_t headers_claude[] = {
         { "Content-Type",      "application/json" },
         { "x-api-key",         s_api_key },
         { "anthropic-version", "2023-06-01" },
     };
+    claw_net_header_t headers_openai[2];
+
+    claw_net_header_t *headers;
+    if (s_openai_compat) {
+        snprintf(s_auth_bearer, sizeof(s_auth_bearer),
+                 "Bearer %s", s_api_key);
+        headers_openai[0] = (claw_net_header_t)
+            { "Content-Type",  "application/json" };
+        headers_openai[1] = (claw_net_header_t)
+            { "Authorization", s_auth_bearer };
+        headers = headers_openai;
+        hdr_count = 2;
+    } else {
+        headers = headers_claude;
+        hdr_count = 3;
+    }
 
     for (int attempt = 0; attempt <= API_MAX_RETRIES; attempt++) {
         if (attempt > 0) {
@@ -120,7 +145,7 @@ static cJSON *do_api_call(cJSON *req_body)
         }
 
         size_t resp_len = 0;
-        int status = claw_net_post(s_api_url, headers, 3,
+        int status = claw_net_post(s_api_url, headers, hdr_count,
                                     body_str, strlen(body_str),
                                     resp_buf, RESP_BUF_SIZE, &resp_len);
 
@@ -155,17 +180,77 @@ static cJSON *do_api_call(cJSON *req_body)
 
 /* ---- Shared AI engine logic ---- */
 
+/*
+ * Wrap Claude tool schema into OpenAI format:
+ *   { name, description, input_schema }
+ *   → { type: "function", function: { name, description, parameters } }
+ */
+static cJSON *wrap_tools_openai(cJSON *claude_tools)
+{
+    cJSON *arr = cJSON_CreateArray();
+    int n = cJSON_GetArraySize(claude_tools);
+    for (int i = 0; i < n; i++) {
+        cJSON *ct = cJSON_GetArrayItem(claude_tools, i);
+        cJSON *wrapper = cJSON_CreateObject();
+        cJSON_AddStringToObject(wrapper, "type", "function");
+
+        cJSON *fn = cJSON_CreateObject();
+        cJSON *name = cJSON_GetObjectItem(ct, "name");
+        cJSON *desc = cJSON_GetObjectItem(ct, "description");
+        cJSON *schema = cJSON_GetObjectItem(ct, "input_schema");
+        if (name) {
+            cJSON_AddStringToObject(fn, "name", name->valuestring);
+        }
+        if (desc) {
+            cJSON_AddStringToObject(fn, "description",
+                                    desc->valuestring);
+        }
+        if (schema) {
+            cJSON_AddItemToObject(fn, "parameters",
+                                  cJSON_Duplicate(schema, 1));
+        }
+        cJSON_AddItemToObject(wrapper, "function", fn);
+        cJSON_AddItemToArray(arr, wrapper);
+    }
+    return arr;
+}
+
 static cJSON *build_request(const char *system_prompt,
                             cJSON *messages, cJSON *tools)
 {
     cJSON *req = cJSON_CreateObject();
     cJSON_AddStringToObject(req, "model", s_model);
     cJSON_AddNumberToObject(req, "max_tokens", AI_MAX_TOKENS);
-    cJSON_AddStringToObject(req, "system", system_prompt);
 
-    cJSON_AddItemReferenceToObject(req, "messages", messages);
-    if (tools && cJSON_GetArraySize(tools) > 0) {
-        cJSON_AddItemReferenceToObject(req, "tools", tools);
+    if (s_openai_compat) {
+        /*
+         * OpenAI format: system prompt as first message,
+         * tools wrapped in { type: "function", function: {...} }.
+         */
+        cJSON *msgs = cJSON_CreateArray();
+        cJSON *sys_m = cJSON_CreateObject();
+        cJSON_AddStringToObject(sys_m, "role", "system");
+        cJSON_AddStringToObject(sys_m, "content", system_prompt);
+        cJSON_AddItemToArray(msgs, sys_m);
+
+        int n = cJSON_GetArraySize(messages);
+        for (int i = 0; i < n; i++) {
+            cJSON_AddItemToArray(msgs,
+                cJSON_Duplicate(cJSON_GetArrayItem(messages, i), 1));
+        }
+        cJSON_AddItemToObject(req, "messages", msgs);
+
+        if (tools && cJSON_GetArraySize(tools) > 0) {
+            cJSON *oai_tools = wrap_tools_openai(tools);
+            cJSON_AddItemToObject(req, "tools", oai_tools);
+        }
+    } else {
+        /* Claude format: system as separate field */
+        cJSON_AddStringToObject(req, "system", system_prompt);
+        cJSON_AddItemReferenceToObject(req, "messages", messages);
+        if (tools && cJSON_GetArraySize(tools) > 0) {
+            cJSON_AddItemReferenceToObject(req, "tools", tools);
+        }
     }
 
     return req;
@@ -425,32 +510,135 @@ static int ai_chat_with_messages(const char *system_prompt,
             break;
         }
 
-        cJSON *content = cJSON_GetObjectItem(resp, "content");
-        cJSON *stop = cJSON_GetObjectItem(resp, "stop_reason");
-        const char *stop_reason = (stop && cJSON_IsString(stop))
-                                  ? stop->valuestring : "";
+        int has_tool_calls = 0;
 
-        extract_text(content, reply, reply_size);
+        if (s_openai_compat) {
+            /* OpenAI: choices[0].message */
+            cJSON *choices = cJSON_GetObjectItem(resp, "choices");
+            cJSON *choice0 = choices ? cJSON_GetArrayItem(choices, 0)
+                                     : NULL;
+            cJSON *msg = choice0 ? cJSON_GetObjectItem(choice0,
+                                                        "message")
+                                 : NULL;
+            cJSON *finish = choice0 ? cJSON_GetObjectItem(choice0,
+                                                           "finish_reason")
+                                    : NULL;
+            const char *fr = (finish && cJSON_IsString(finish))
+                             ? finish->valuestring : "";
 
-        if (strcmp(stop_reason, "tool_use") == 0) {
-            CLAW_LOGI(TAG, "tool_use round %d", round + 1);
-            claw_lcd_status("Tool call ...");
-            claw_lcd_progress((round + 1) * 100 / MAX_TOOL_ROUNDS);
+            if (msg) {
+                cJSON *c = cJSON_GetObjectItem(msg, "content");
+                if (c && cJSON_IsString(c)) {
+                    snprintf(reply, reply_size, "%s", c->valuestring);
+                }
+            }
 
-            cJSON *asst_msg = cJSON_CreateObject();
-            cJSON_AddStringToObject(asst_msg, "role", "assistant");
-            cJSON_AddItemToObject(asst_msg, "content",
-                                  cJSON_Duplicate(content, 1));
-            cJSON_AddItemToArray(messages, asst_msg);
+            cJSON *tc = msg ? cJSON_GetObjectItem(msg, "tool_calls")
+                            : NULL;
+            if (tc && cJSON_GetArraySize(tc) > 0 &&
+                (strcmp(fr, "tool_calls") == 0 ||
+                 strcmp(fr, "stop") != 0)) {
+                has_tool_calls = 1;
+                CLAW_LOGI(TAG, "tool_use round %d", round + 1);
+                claw_lcd_status("Tool call ...");
+                claw_lcd_progress(
+                    (round + 1) * 100 / MAX_TOOL_ROUNDS);
 
-            cJSON *tool_results = execute_tool_calls(content);
-            cJSON *result_msg = cJSON_CreateObject();
-            cJSON_AddStringToObject(result_msg, "role", "user");
-            cJSON_AddItemToObject(result_msg, "content", tool_results);
-            cJSON_AddItemToArray(messages, result_msg);
+                /* Add assistant message with tool_calls */
+                cJSON_AddItemToArray(messages,
+                    cJSON_Duplicate(msg, 1));
 
-            cJSON_Delete(resp);
-            notify_status(AI_STATUS_THINKING, NULL);
+                /* Execute each tool call */
+                for (int t = 0; t < cJSON_GetArraySize(tc); t++) {
+                    cJSON *call = cJSON_GetArrayItem(tc, t);
+                    cJSON *fn = cJSON_GetObjectItem(call, "function");
+                    cJSON *call_id = cJSON_GetObjectItem(call, "id");
+                    const char *tname = "";
+                    cJSON *args = NULL;
+                    if (fn) {
+                        cJSON *n = cJSON_GetObjectItem(fn, "name");
+                        tname = n ? n->valuestring : "";
+                        cJSON *a = cJSON_GetObjectItem(fn,
+                                                        "arguments");
+                        if (a && cJSON_IsString(a)) {
+                            args = cJSON_Parse(a->valuestring);
+                        }
+                    }
+
+                    CLAW_LOGI(TAG, "tool_use: %s", tname);
+                    notify_status(AI_STATUS_TOOL_CALL, tname);
+
+                    cJSON *res_obj = cJSON_CreateObject();
+                    const claw_tool_t *tool = claw_tool_find(tname);
+                    if (tool) {
+                        tool->execute(args ? args : cJSON_CreateObject(),
+                                      res_obj);
+                    } else {
+                        cJSON_AddStringToObject(res_obj, "error",
+                                                "tool not found");
+                    }
+                    if (args) {
+                        cJSON_Delete(args);
+                    }
+
+                    char *res_str = cJSON_PrintUnformatted(res_obj);
+                    cJSON_Delete(res_obj);
+
+                    /* OpenAI tool result: role=tool */
+                    cJSON *tr_msg = cJSON_CreateObject();
+                    cJSON_AddStringToObject(tr_msg, "role", "tool");
+                    cJSON_AddStringToObject(tr_msg, "tool_call_id",
+                        call_id ? call_id->valuestring : "");
+                    cJSON_AddStringToObject(tr_msg, "content",
+                        res_str ? res_str : "{}");
+                    cJSON_AddItemToArray(messages, tr_msg);
+
+                    if (res_str) {
+                        cJSON_free(res_str);
+                    }
+                }
+
+                cJSON_Delete(resp);
+                notify_status(AI_STATUS_THINKING, NULL);
+                continue;
+            }
+        } else {
+            /* Claude format */
+            cJSON *content = cJSON_GetObjectItem(resp, "content");
+            cJSON *stop = cJSON_GetObjectItem(resp, "stop_reason");
+            const char *stop_reason = (stop && cJSON_IsString(stop))
+                                      ? stop->valuestring : "";
+
+            extract_text(content, reply, reply_size);
+
+            if (strcmp(stop_reason, "tool_use") == 0) {
+                has_tool_calls = 1;
+                CLAW_LOGI(TAG, "tool_use round %d", round + 1);
+                claw_lcd_status("Tool call ...");
+                claw_lcd_progress(
+                    (round + 1) * 100 / MAX_TOOL_ROUNDS);
+
+                cJSON *asst_msg = cJSON_CreateObject();
+                cJSON_AddStringToObject(asst_msg, "role",
+                                        "assistant");
+                cJSON_AddItemToObject(asst_msg, "content",
+                    cJSON_Duplicate(content, 1));
+                cJSON_AddItemToArray(messages, asst_msg);
+
+                cJSON *tool_results = execute_tool_calls(content);
+                cJSON *result_msg = cJSON_CreateObject();
+                cJSON_AddStringToObject(result_msg, "role", "user");
+                cJSON_AddItemToObject(result_msg, "content",
+                                      tool_results);
+                cJSON_AddItemToArray(messages, result_msg);
+
+                cJSON_Delete(resp);
+                notify_status(AI_STATUS_THINKING, NULL);
+                continue;
+            }
+        }
+
+        if (has_tool_calls) {
             continue;
         }
 
@@ -643,6 +831,11 @@ int ai_engine_init(void)
     if (ai_ltm_init() != CLAW_OK) {
         CLAW_LOGW(TAG, "ltm init failed");
     }
+
+    /* Auto-detect API format from model name */
+    s_openai_compat = (strncmp(s_model, "claude", 6) != 0);
+    CLAW_LOGI(TAG, "api format: %s",
+              s_openai_compat ? "openai" : "claude");
 
     if (strlen(s_api_key) == 0) {
         CLAW_LOGW(TAG, "no API key configured");
