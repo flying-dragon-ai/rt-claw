@@ -688,6 +688,144 @@ static int ai_chat_with_messages(const char *system_prompt,
     return ret;
 }
 
+/* ---- Context compression ---- */
+
+#define COMPRESS_THRESHOLD  6
+#define COMPRESS_SUMMARY_MAX 512
+
+static const char *COMPRESS_PROMPT =
+    "Summarize the following conversation in 2-3 concise sentences. "
+    "Preserve all key facts, decisions, and context. "
+    "Write in the same language as the conversation.\n\n";
+
+/*
+ * Compress older messages for a channel by generating an AI summary.
+ * Called on the worker thread so do_api_call() is safe.
+ * On failure, does nothing (drop_oldest_pair_for handles overflow).
+ */
+static void try_compress_memory(int channel)
+{
+    int ch_count = ai_memory_count_channel(channel);
+    if (ch_count < COMPRESS_THRESHOLD) {
+        return;
+    }
+
+    cJSON *messages = ai_memory_build(channel);
+    if (!messages) {
+        return;
+    }
+
+    int total = cJSON_GetArraySize(messages);
+    int keep = total / 2;
+    int compress_n = total - keep;
+
+    /* Build text from oldest messages */
+    size_t text_sz = 1024;
+    char *text = claw_malloc(text_sz);
+    if (!text) {
+        cJSON_Delete(messages);
+        return;
+    }
+
+    size_t off = 0;
+    for (int i = 0; i < compress_n && off < text_sz - 64; i++) {
+        cJSON *m = cJSON_GetArrayItem(messages, i);
+        const char *role = cJSON_GetObjectItem(m, "role")->valuestring;
+        cJSON *c = cJSON_GetObjectItem(m, "content");
+        const char *ct = cJSON_IsString(c) ? c->valuestring : "[...]";
+        off += snprintf(text + off, text_sz - off,
+                        "%s: %.*s\n", role, 200, ct);
+    }
+
+    /* Build summary request */
+    size_t prompt_sz = strlen(COMPRESS_PROMPT) + off + 1;
+    char *prompt = claw_malloc(prompt_sz);
+    if (!prompt) {
+        claw_free(text);
+        cJSON_Delete(messages);
+        return;
+    }
+    snprintf(prompt, prompt_sz, "%s%s", COMPRESS_PROMPT, text);
+    claw_free(text);
+
+    cJSON *req_msgs = cJSON_CreateArray();
+    cJSON *user_m = cJSON_CreateObject();
+    cJSON_AddStringToObject(user_m, "role", "user");
+    cJSON_AddStringToObject(user_m, "content", prompt);
+    cJSON_AddItemToArray(req_msgs, user_m);
+    claw_free(prompt);
+
+    cJSON *req_body = cJSON_CreateObject();
+    cJSON_AddStringToObject(req_body, "model", s_model);
+    cJSON_AddNumberToObject(req_body, "max_tokens", 256);
+    cJSON_AddItemToObject(req_body, "messages", req_msgs);
+    if (!s_openai_compat) {
+        cJSON_AddStringToObject(req_body, "system",
+                                "You are a conversation summarizer.");
+    }
+
+    cJSON *resp = do_api_call(req_body);
+    cJSON_Delete(req_body);
+
+    if (!resp) {
+        cJSON_Delete(messages);
+        CLAW_LOGW(TAG, "compression API call failed, skipping");
+        return;
+    }
+
+    /* Extract summary text */
+    char summary[COMPRESS_SUMMARY_MAX];
+    summary[0] = '\0';
+    if (s_openai_compat) {
+        cJSON *choices = cJSON_GetObjectItem(resp, "choices");
+        cJSON *c0 = choices ? cJSON_GetArrayItem(choices, 0) : NULL;
+        cJSON *msg = c0 ? cJSON_GetObjectItem(c0, "message") : NULL;
+        cJSON *ct = msg ? cJSON_GetObjectItem(msg, "content") : NULL;
+        if (ct && cJSON_IsString(ct)) {
+            snprintf(summary, sizeof(summary), "%s", ct->valuestring);
+        }
+    } else {
+        cJSON *content = cJSON_GetObjectItem(resp, "content");
+        extract_text(content, summary, sizeof(summary));
+    }
+    cJSON_Delete(resp);
+
+    if (summary[0] == '\0') {
+        cJSON_Delete(messages);
+        return;
+    }
+
+    /*
+     * Rebuild channel memory: clear old messages, add summary
+     * as first user message, then re-add the newer half.
+     */
+    ai_memory_clear_channel(channel);
+
+    char summary_tagged[COMPRESS_SUMMARY_MAX + 32];
+    snprintf(summary_tagged, sizeof(summary_tagged),
+             "[Earlier conversation summary] %s", summary);
+    ai_memory_add("user", summary_tagged, channel);
+
+    for (int i = compress_n; i < total; i++) {
+        cJSON *m = cJSON_GetArrayItem(messages, i);
+        const char *role = cJSON_GetObjectItem(m, "role")->valuestring;
+        cJSON *c = cJSON_GetObjectItem(m, "content");
+        if (cJSON_IsString(c)) {
+            ai_memory_add(role, c->valuestring, channel);
+        } else {
+            char *s = cJSON_PrintUnformatted(c);
+            if (s) {
+                ai_memory_add(role, s, channel);
+                cJSON_free(s);
+            }
+        }
+    }
+
+    cJSON_Delete(messages);
+    CLAW_LOGI(TAG, "compressed %d msgs -> summary + %d msgs (ch=%d)",
+              compress_n, keep, channel);
+}
+
 /* ---- Worker: process a single ai_chat request ---- */
 
 static void do_chat(struct ai_request *req)
@@ -704,6 +842,12 @@ static void do_chat(struct ai_request *req)
         }
     }
 #endif
+
+    /* Compress before adding new message if channel is getting full */
+    if (ai_memory_count_channel(req->channel) >=
+        CONFIG_RTCLAW_AI_MEMORY_MAX_MSGS - 4) {
+        try_compress_memory(req->channel);
+    }
 
     ai_memory_add("user", req->input, req->channel);
 
