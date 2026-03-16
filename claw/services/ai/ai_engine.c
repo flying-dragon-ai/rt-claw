@@ -847,3 +847,58 @@ int ai_engine_init(void)
     }
     return CLAW_OK;
 }
+
+int ai_ping(void)
+{
+    if (s_api_key[0] == '\0' || s_api_url[0] == '\0') {
+        return CLAW_ERROR;
+    }
+
+    /*
+     * Build a minimal request — max_tokens=1, single "ping" message.
+     * Does NOT acquire s_api_lock so it never blocks ai_chat().
+     */
+    char req[256];
+    if (s_openai_compat) {
+        snprintf(req, sizeof(req),
+            "{\"model\":\"%s\","
+            "\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],"
+            "\"max_tokens\":1}", s_model);
+    } else {
+        snprintf(req, sizeof(req),
+            "{\"model\":\"%s\","
+            "\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],"
+            "\"max_tokens\":1}", s_model);
+    }
+
+    /* Reuse the same header setup as do_api_call */
+    char auth_buf[AI_KEY_MAX + 8];
+    claw_net_header_t headers[3];
+    int hdr_count;
+
+    if (s_openai_compat) {
+        snprintf(auth_buf, sizeof(auth_buf), "Bearer %s", s_api_key);
+        headers[0] = (claw_net_header_t)
+            { "Content-Type",  "application/json" };
+        headers[1] = (claw_net_header_t)
+            { "Authorization", auth_buf };
+        hdr_count = 2;
+    } else {
+        headers[0] = (claw_net_header_t)
+            { "Content-Type",      "application/json" };
+        headers[1] = (claw_net_header_t)
+            { "x-api-key",         s_api_key };
+        headers[2] = (claw_net_header_t)
+            { "anthropic-version", "2023-06-01" };
+        hdr_count = 3;
+    }
+
+    char resp[256];
+    size_t resp_len = 0;
+    int status = claw_net_post(s_api_url, headers, hdr_count,
+                                req, strlen(req),
+                                resp, sizeof(resp), &resp_len);
+
+    /* Any HTTP response means the API is reachable */
+    return (status > 0) ? CLAW_OK : CLAW_ERROR;
+}

@@ -76,8 +76,15 @@ static uint16_t     s_rpc_pending_seq;
 static char         s_rpc_result[SWARM_RPC_PAYLOAD_MAX];
 static uint8_t      s_rpc_status;
 
-static uint8_t tool_name_to_cap(const char *name)
+static uint8_t build_capabilities(void);
+
+static uint8_t resolve_tool_caps(const char *name)
 {
+    const claw_tool_t *tool = claw_tool_find(name);
+    if (tool && tool->required_caps) {
+        return tool->required_caps;
+    }
+    /* Fallback: prefix-based heuristic for unregistered tools */
     if (strncmp(name, "gpio_", 5) == 0) {
         return SWARM_CAP_GPIO;
     }
@@ -85,6 +92,24 @@ static uint8_t tool_name_to_cap(const char *name)
         return SWARM_CAP_LCD;
     }
     return SWARM_CAP_AI;
+}
+
+static uint8_t determine_self_role(void)
+{
+    uint8_t caps = build_capabilities();
+    if ((caps & SWARM_CAP_AI) && (caps & SWARM_CAP_INTERNET)) {
+        return SWARM_ROLE_THINKER;
+    }
+    if (caps & SWARM_CAP_GPIO) {
+        return SWARM_ROLE_WORKER;
+    }
+    return SWARM_ROLE_OBSERVER;
+}
+
+static uint8_t count_active_tasks(void)
+{
+    /* Approximate: count non-idle RPC state */
+    return 0;
 }
 
 static void notify_node_event(uint32_t node_id, int joined)
@@ -154,12 +179,15 @@ static void heartbeat_send(void)
     }
 
     struct swarm_heartbeat hb;
+    memset(&hb, 0, sizeof(hb));
     hb.magic = SWARM_HEARTBEAT_MAGIC;
     hb.node_id = s_self_id;
     hb.uptime_s = claw_tick_ms() / 1000;
     hb.capabilities = build_capabilities();
     hb.load = 0;
     hb.port = CLAW_SWARM_PORT;
+    hb.role = determine_self_role();
+    hb.active_tasks = count_active_tasks();
 
     struct sockaddr_in dest;
     memset(&dest, 0, sizeof(dest));
@@ -305,6 +333,8 @@ static void receiver_thread(void *arg)
                 nodes[idx].capabilities = hb.capabilities;
                 nodes[idx].load = hb.load;
                 nodes[idx].uptime_s = hb.uptime_s;
+                nodes[idx].role = hb.role;
+                nodes[idx].active_tasks = hb.active_tasks;
 
                 if (is_new) {
                     CLAW_LOGI(TAG, "node 0x%08x joined from %s",
@@ -332,6 +362,42 @@ static void receiver_thread(void *arg)
     }
 }
 
+/*
+ * Find the best capable node — lowest load among online nodes
+ * matching the required capability bitmap.
+ */
+static int find_best_node(uint8_t cap, uint32_t *out_id,
+                          uint32_t *out_ip, uint16_t *out_port)
+{
+    int best = -1;
+    int min_load = 101;
+
+    for (int i = 0; i < CLAW_SWARM_MAX_NODES; i++) {
+        if (nodes[i].state != SWARM_NODE_ONLINE) {
+            continue;
+        }
+        if (nodes[i].id == s_self_id) {
+            continue;
+        }
+        if ((nodes[i].capabilities & cap) != cap) {
+            continue;
+        }
+        if (nodes[i].load < min_load) {
+            min_load = nodes[i].load;
+            best = i;
+        }
+    }
+
+    if (best < 0) {
+        return CLAW_ERROR;
+    }
+
+    *out_id   = nodes[best].id;
+    *out_ip   = nodes[best].ip_addr;
+    *out_port = nodes[best].port;
+    return CLAW_OK;
+}
+
 int swarm_rpc_call(const char *tool_name, const char *params,
                    char *result, size_t result_sz)
 {
@@ -342,36 +408,29 @@ int swarm_rpc_call(const char *tool_name, const char *params,
         return CLAW_ERROR;
     }
 
-    uint8_t cap = tool_name_to_cap(tool_name);
+    /* Check tool flags — refuse to delegate local-only tools */
+    const claw_tool_t *tool = claw_tool_find(tool_name);
+    if (tool && (tool->flags & CLAW_TOOL_LOCAL_ONLY)) {
+        return CLAW_ERROR;
+    }
 
-    /* Find a capable online node */
+    uint8_t cap = resolve_tool_caps(tool_name);
+
+    /* Find the best capable node (load-aware) */
     claw_mutex_lock(swarm_lock, CLAW_WAIT_FOREVER);
     uint32_t target_id = 0;
     uint32_t target_ip = 0;
     uint16_t target_port = 0;
-    for (int i = 0; i < CLAW_SWARM_MAX_NODES; i++) {
-        if (nodes[i].state != SWARM_NODE_ONLINE) {
-            continue;
-        }
-        if (nodes[i].id == s_self_id) {
-            continue;
-        }
-        if (nodes[i].capabilities & cap) {
-            target_id   = nodes[i].id;
-            target_ip   = nodes[i].ip_addr;
-            target_port = nodes[i].port;
-            break;
-        }
-    }
+    int found = find_best_node(cap, &target_id, &target_ip, &target_port);
     claw_mutex_unlock(swarm_lock);
 
-    if (target_id == 0) {
+    if (found != CLAW_OK) {
         CLAW_LOGD(TAG, "rpc: no node with cap 0x%02x for %s",
                   cap, tool_name);
         return CLAW_ERROR;
     }
 
-    /* Build and send RPC request */
+    /* Build RPC request */
     struct swarm_rpc_msg req;
     memset(&req, 0, sizeof(req));
     req.magic    = SWARM_RPC_MAGIC;
@@ -383,36 +442,44 @@ int swarm_rpc_call(const char *tool_name, const char *params,
         snprintf(req.payload, sizeof(req.payload), "%s", params);
     }
 
-    claw_mutex_lock(s_rpc_lock, CLAW_WAIT_FOREVER);
-    s_rpc_seq++;
-    req.seq = s_rpc_seq;
-    s_rpc_pending_seq = s_rpc_seq;
-    s_rpc_result[0] = '\0';
-    s_rpc_status = SWARM_RPC_ERROR;
-    claw_mutex_unlock(s_rpc_lock);
-
     struct sockaddr_in dest;
     memset(&dest, 0, sizeof(dest));
     dest.sin_family = AF_INET;
     dest.sin_port = htons(target_port);
     dest.sin_addr.s_addr = htonl(target_ip);
 
-    CLAW_LOGI(TAG, "rpc: %s -> node 0x%08x",
-              tool_name, (unsigned)target_id);
-    send_rpc_to(&dest, &req);
+    /* Send with retry (exponential backoff) */
+    for (int attempt = 0; attempt < SWARM_RPC_MAX_RETRIES; attempt++) {
+        claw_mutex_lock(s_rpc_lock, CLAW_WAIT_FOREVER);
+        s_rpc_seq++;
+        req.seq = s_rpc_seq;
+        s_rpc_pending_seq = s_rpc_seq;
+        s_rpc_result[0] = '\0';
+        s_rpc_status = SWARM_RPC_ERROR;
+        claw_mutex_unlock(s_rpc_lock);
 
-    /* Wait for response */
-    if (claw_sem_take(s_rpc_sem, SWARM_RPC_TIMEOUT_MS) != CLAW_OK) {
-        CLAW_LOGW(TAG, "rpc timeout: %s", tool_name);
-        return CLAW_ERROR;
+        CLAW_LOGI(TAG, "rpc: %s -> node 0x%08x (attempt %d/%d)",
+                  tool_name, (unsigned)target_id,
+                  attempt + 1, SWARM_RPC_MAX_RETRIES);
+        send_rpc_to(&dest, &req);
+
+        if (claw_sem_take(s_rpc_sem, SWARM_RPC_TIMEOUT_MS) == CLAW_OK) {
+            claw_mutex_lock(s_rpc_lock, CLAW_WAIT_FOREVER);
+            snprintf(result, result_sz, "%s", s_rpc_result);
+            int ok = (s_rpc_status == SWARM_RPC_OK);
+            claw_mutex_unlock(s_rpc_lock);
+            return ok ? CLAW_OK : CLAW_ERROR;
+        }
+
+        CLAW_LOGW(TAG, "rpc timeout: %s (attempt %d/%d)",
+                  tool_name, attempt + 1, SWARM_RPC_MAX_RETRIES);
+
+        if (attempt < SWARM_RPC_MAX_RETRIES - 1) {
+            claw_thread_delay_ms(SWARM_RPC_RETRY_BASE_MS << attempt);
+        }
     }
 
-    claw_mutex_lock(s_rpc_lock, CLAW_WAIT_FOREVER);
-    snprintf(result, result_sz, "%s", s_rpc_result);
-    int ok = (s_rpc_status == SWARM_RPC_OK);
-    claw_mutex_unlock(s_rpc_lock);
-
-    return ok ? CLAW_OK : CLAW_ERROR;
+    return CLAW_ERROR;
 }
 
 int swarm_start(void)
@@ -525,6 +592,17 @@ int swarm_node_count(void)
     return node_count;
 }
 
+static const char *role_name(uint8_t role)
+{
+    switch (role) {
+    case SWARM_ROLE_COORDINATOR: return "coord";
+    case SWARM_ROLE_THINKER:    return "think";
+    case SWARM_ROLE_WORKER:     return "work";
+    case SWARM_ROLE_OBSERVER:   return "obs";
+    default:                    return "?";
+    }
+}
+
 void swarm_list_nodes(void)
 {
     claw_mutex_lock(swarm_lock, CLAW_WAIT_FOREVER);
@@ -538,10 +616,13 @@ void swarm_list_nodes(void)
                 (nodes[i].id == s_self_id) ? "self" :
                 (nodes[i].state == SWARM_NODE_ONLINE) ? "online" : "disc";
             printf("  [%d] id=0x%08x  %-6s  cap=0x%02x  "
-                   "load=%d%%  up=%us\n",
+                   "load=%d%%  role=%-5s  tasks=%d  up=%us\n",
                    i, (unsigned)nodes[i].id, state_str,
                    nodes[i].capabilities,
-                   nodes[i].load, (unsigned)nodes[i].uptime_s);
+                   nodes[i].load,
+                   role_name(nodes[i].role),
+                   nodes[i].active_tasks,
+                   (unsigned)nodes[i].uptime_s);
         }
     }
 

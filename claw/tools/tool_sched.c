@@ -44,9 +44,9 @@ typedef struct __attribute__((packed)) {
 
 typedef struct {
     char name[24];
-    char prompt[SCHED_PROMPT_MAX];
-    char reply[SCHED_REPLY_MAX];
+    char *prompt;               /* heap-allocated, freed on ctx_free */
     int  in_use;
+    int  pending;               /* 1 = queued for next worker cycle */
     uint32_t interval_s;        /* for NVS persistence */
     int32_t  count;             /* for NVS persistence */
     sched_reply_fn_t reply_fn;
@@ -106,6 +106,8 @@ static void ctx_free_by_name(const char *name)
     for (int i = 0; i < SCHED_AI_MAX; i++) {
         if (s_ctx[i].in_use &&
             strcmp(s_ctx[i].name, name) == 0) {
+            claw_free(s_ctx[i].prompt);
+            s_ctx[i].prompt = NULL;
             s_ctx[i].in_use = 0;
             return;
         }
@@ -125,6 +127,25 @@ int sched_tool_remove_by_name(const char *name)
     return CLAW_OK;
 }
 
+/*
+ * Find the next pending task using round-robin scan.
+ * Must be called with s_worker_lock held.
+ */
+static int s_rr_idx;
+
+static sched_ai_ctx_t *drain_pending(void)
+{
+    for (int i = 0; i < SCHED_AI_MAX; i++) {
+        int idx = (s_rr_idx + i) % SCHED_AI_MAX;
+        if (s_ctx[idx].in_use && s_ctx[idx].pending) {
+            s_ctx[idx].pending = 0;
+            s_rr_idx = (idx + 1) % SCHED_AI_MAX;
+            return &s_ctx[idx];
+        }
+    }
+    return NULL;
+}
+
 /* Worker thread — runs AI calls with sufficient stack */
 static void ai_worker_thread(void *arg)
 {
@@ -136,11 +157,13 @@ static void ai_worker_thread(void *arg)
         claw_mutex_lock(s_worker_lock, CLAW_WAIT_FOREVER);
         sched_ai_ctx_t *ctx = s_pending_ctx;
         s_pending_ctx = NULL;
-        s_worker_busy = 1;
+        if (!ctx) {
+            ctx = drain_pending();
+        }
+        s_worker_busy = (ctx != NULL);
         claw_mutex_unlock(s_worker_lock);
 
         if (!ctx) {
-            s_worker_busy = 0;
             continue;
         }
 
@@ -169,51 +192,48 @@ static void ai_worker_thread(void *arg)
                 " Output to serial console only.");
         }
 
-        int rc = ai_chat_raw(ctx->prompt, ctx->reply,
-                             SCHED_REPLY_MAX);
-        if (rc == CLAW_OK && ctx->reply[0] != '\0') {
+        char *reply = claw_malloc(SCHED_REPLY_MAX);
+        if (!reply) {
+            CLAW_LOGE(TAG, "reply alloc failed");
+            ai_set_channel_hint(NULL);
+            claw_mutex_lock(s_worker_lock, CLAW_WAIT_FOREVER);
+            s_worker_busy = 0;
+            claw_mutex_unlock(s_worker_lock);
+            continue;
+        }
+
+        int rc = ai_chat_raw(ctx->prompt, reply, SCHED_REPLY_MAX);
+        if (rc == CLAW_OK && reply[0] != '\0') {
             if (ctx->reply_fn) {
-                ctx->reply_fn(ctx->reply_target, ctx->reply);
+                ctx->reply_fn(ctx->reply_target, reply);
             } else {
-                printf("\n\033[0;33m<sched>\033[0m %s\n",
-                       ctx->reply);
+                printf("\n\033[0;33m<sched>\033[0m %s\n", reply);
                 fflush(stdout);
             }
         } else {
-            /*
-             * Task failed.  Save the error reason, then decide
-             * whether to ask the agent to compose a friendly
-             * notification or just forward the raw error.
-             */
             char err_reason[128];
-            const char *src = ctx->reply[0] ? ctx->reply
-                                            : "unknown error";
+            const char *src = reply[0] ? reply : "unknown error";
             strncpy(err_reason, src, sizeof(err_reason) - 1);
             err_reason[sizeof(err_reason) - 1] = '\0';
 
             int notified = 0;
 
-            /*
-             * Only retry via AI when the failure is NOT an API
-             * error — if the API itself is down (503, timeout,
-             * etc.) another call will also fail.
-             */
             if (!strstr(err_reason, "API")) {
-                snprintf(ctx->prompt, SCHED_PROMPT_MAX,
+                char retry_prompt[SCHED_PROMPT_MAX];
+                snprintf(retry_prompt, sizeof(retry_prompt),
                          "A scheduled task failed: %s. "
                          "Briefly inform the user and suggest "
                          "they can retry later.",
                          err_reason);
 
-                rc = ai_chat_raw(ctx->prompt, ctx->reply,
+                rc = ai_chat_raw(retry_prompt, reply,
                                  SCHED_REPLY_MAX);
-                if (rc == CLAW_OK && ctx->reply[0] != '\0') {
+                if (rc == CLAW_OK && reply[0] != '\0') {
                     if (ctx->reply_fn) {
-                        ctx->reply_fn(ctx->reply_target,
-                                      ctx->reply);
+                        ctx->reply_fn(ctx->reply_target, reply);
                     } else {
                         printf("\n\033[0;33m<sched>\033[0m %s\n",
-                               ctx->reply);
+                               reply);
                         fflush(stdout);
                     }
                     notified = 1;
@@ -231,6 +251,7 @@ static void ai_worker_thread(void *arg)
             }
         }
 
+        claw_free(reply);
         ai_set_channel_hint(NULL);
 
         claw_mutex_lock(s_worker_lock, CLAW_WAIT_FOREVER);
@@ -248,10 +269,16 @@ static void sched_ai_callback(void *arg)
     sched_ai_ctx_t *ctx = (sched_ai_ctx_t *)arg;
 
     claw_mutex_lock(s_worker_lock, CLAW_WAIT_FOREVER);
-    if (s_worker_busy) {
-        /* Worker still processing previous call, skip */
+    if (s_worker_busy || s_pending_ctx) {
+        /*
+         * Worker busy — mark pending instead of dropping.
+         * sem_give wakes the worker so it picks this up after
+         * finishing the current task (one task per wakeup).
+         */
+        ctx->pending = 1;
         claw_mutex_unlock(s_worker_lock);
-        CLAW_LOGD(TAG, "worker busy, skipping tick");
+        claw_sem_give(s_worker_sem);
+        CLAW_LOGD(TAG, "worker busy, '%s' queued", ctx->name);
         return;
     }
     s_pending_ctx = ctx;
@@ -289,7 +316,12 @@ static int sched_nvs_save(void)
         sched_persist_t rec;
         memset(&rec, 0, sizeof(rec));
         snprintf(rec.name, sizeof(rec.name), "%s", s_ctx[i].name);
-        snprintf(rec.prompt, sizeof(rec.prompt), "%s", s_ctx[i].prompt);
+        if (s_ctx[i].prompt) {
+            snprintf(rec.prompt, sizeof(rec.prompt), "%s",
+                     s_ctx[i].prompt);
+        } else {
+            rec.prompt[0] = '\0';
+        }
         rec.interval_s = s_ctx[i].interval_s;
         rec.count = s_ctx[i].count;
         snprintf(rec.reply_target, sizeof(rec.reply_target),
@@ -340,7 +372,12 @@ static void sched_nvs_restore(void)
         }
 
         snprintf(ctx->name, sizeof(ctx->name), "%s", rec.name);
-        snprintf(ctx->prompt, SCHED_PROMPT_MAX, "%s", rec.prompt);
+        ctx->prompt = claw_malloc(strlen(rec.prompt) + 1);
+        if (!ctx->prompt) {
+            ctx->in_use = 0;
+            break;
+        }
+        strcpy(ctx->prompt, rec.prompt);
         ctx->reply_fn = NULL;  /* late-bound at execution time */
         snprintf(ctx->reply_target, REPLY_TARGET_MAX,
                  "%s", rec.reply_target);
@@ -398,8 +435,18 @@ static int tool_schedule_task(const cJSON *params, cJSON *result)
     }
 
     snprintf(ctx->name, sizeof(ctx->name), "%s", name);
-    snprintf(ctx->prompt, SCHED_PROMPT_MAX, "%s",
-             prompt_j->valuestring);
+    size_t plen = strlen(prompt_j->valuestring);
+    if (plen >= SCHED_PROMPT_MAX) {
+        plen = SCHED_PROMPT_MAX - 1;
+    }
+    ctx->prompt = claw_malloc(plen + 1);
+    if (!ctx->prompt) {
+        ctx->in_use = 0;
+        cJSON_AddStringToObject(result, "error", "out of memory");
+        return CLAW_ERROR;
+    }
+    memcpy(ctx->prompt, prompt_j->valuestring, plen);
+    ctx->prompt[plen] = '\0';
     ctx->interval_s = (uint32_t)interval_s;
     ctx->count = (int32_t)count;
 
@@ -411,6 +458,8 @@ static int tool_schedule_task(const cJSON *params, cJSON *result)
 
     if (sched_add(name, (uint32_t)interval_s * 1000, (int32_t)count,
                   sched_ai_callback, ctx) != CLAW_OK) {
+        claw_free(ctx->prompt);
+        ctx->prompt = NULL;
         ctx->in_use = 0;
         cJSON_AddStringToObject(result, "error",
                                 "scheduler full or duplicate name");
@@ -509,17 +558,20 @@ void claw_tools_register_sched(void)
         "List all active scheduled tasks with their names, "
         "intervals, and remaining execution counts. Call this "
         "before removing tasks to see what's available.",
-        schema_list_tasks, tool_list_tasks);
+        schema_list_tasks, tool_list_tasks,
+        0, CLAW_TOOL_LOCAL_ONLY);
 
     claw_tool_register("schedule_task",
         "Schedule a recurring AI task. The prompt will be executed "
         "periodically at the given interval. Use this when the user "
         "asks to do something repeatedly or on a timer.",
-        schema_schedule, tool_schedule_task);
+        schema_schedule, tool_schedule_task,
+        0, CLAW_TOOL_LOCAL_ONLY);
 
     claw_tool_register("remove_task",
         "Remove a previously scheduled recurring task by name.",
-        schema_remove, tool_remove_task);
+        schema_remove, tool_remove_task,
+        0, CLAW_TOOL_LOCAL_ONLY);
 
     /* Restore persistent tasks from NVS after boot */
     sched_nvs_restore();

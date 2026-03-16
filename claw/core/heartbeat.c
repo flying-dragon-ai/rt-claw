@@ -22,6 +22,9 @@
 
 #define TAG "heartbeat"
 
+/* LLM connectivity state: -1 = unknown, 0 = offline, 1 = online */
+static int s_llm_state = -1;
+
 /* Single event entry */
 typedef struct {
     char     category[16];
@@ -126,6 +129,29 @@ out:
     claw_mutex_unlock(s_lock);
 }
 
+/* LLM connectivity probe — runs in its own thread */
+static void ping_thread(void *arg)
+{
+    (void)arg;
+    int ok = (ai_ping() == CLAW_OK) ? 1 : 0;
+    int prev = s_llm_state;
+    s_llm_state = ok;
+
+    if (prev != ok) {
+        const char *msg = ok
+            ? "LLM API is back online"
+            : "LLM API is unreachable";
+        CLAW_LOGI(TAG, "%s", msg);
+        deliver(msg);
+    } else {
+        CLAW_LOGD(TAG, "ping: %s", ok ? "online" : "offline");
+    }
+
+    claw_mutex_lock(s_lock, CLAW_WAIT_FOREVER);
+    s_busy = 0;
+    claw_mutex_unlock(s_lock);
+}
+
 /* Scheduler callback — runs in sched thread, must not block */
 static void heartbeat_tick(void *arg)
 {
@@ -133,8 +159,24 @@ static void heartbeat_tick(void *arg)
 
     claw_mutex_lock(s_lock, CLAW_WAIT_FOREVER);
 
-    if (s_event_count == 0 || s_busy) {
+    if (s_busy) {
         claw_mutex_unlock(s_lock);
+        return;
+    }
+
+    if (s_event_count == 0) {
+        /* No events — do a lightweight LLM ping instead */
+        s_busy = 1;
+        claw_mutex_unlock(s_lock);
+
+        claw_thread_t th = claw_thread_create(
+            "hb_ping", ping_thread, NULL, 4096, 20);
+        if (!th) {
+            CLAW_LOGE(TAG, "ping thread create failed");
+            claw_mutex_lock(s_lock, CLAW_WAIT_FOREVER);
+            s_busy = 0;
+            claw_mutex_unlock(s_lock);
+        }
         return;
     }
 
@@ -223,4 +265,9 @@ void heartbeat_set_reply(heartbeat_reply_fn_t fn,
         s_reply_target[0] = '\0';
     }
     claw_mutex_unlock(s_reply_lock);
+}
+
+int heartbeat_llm_online(void)
+{
+    return s_llm_state;
 }

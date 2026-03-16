@@ -17,6 +17,14 @@ enum swarm_node_state {
     SWARM_NODE_ONLINE,
 };
 
+/* Node role in the swarm — declared in heartbeat */
+enum swarm_role {
+    SWARM_ROLE_WORKER = 0,      /* default: tool execution */
+    SWARM_ROLE_THINKER,         /* AI + internet capable */
+    SWARM_ROLE_COORDINATOR,     /* task decomposition + aggregation */
+    SWARM_ROLE_OBSERVER,        /* read-only monitoring */
+};
+
 struct swarm_node {
     uint32_t id;
     enum swarm_node_state state;
@@ -26,9 +34,11 @@ struct swarm_node {
     uint8_t  capabilities;
     uint8_t  load;
     uint32_t uptime_s;
+    uint8_t  role;              /* enum swarm_role */
+    uint8_t  active_tasks;      /* running task count */
 };
 
-/* 16-byte heartbeat packet (packed) */
+/* 20-byte heartbeat packet (packed) */
 struct __attribute__((packed)) swarm_heartbeat {
     uint32_t magic;         /* 0x434C4157 "CLAW" */
     uint32_t node_id;
@@ -36,6 +46,9 @@ struct __attribute__((packed)) swarm_heartbeat {
     uint8_t  capabilities;
     uint8_t  load;
     uint16_t port;
+    uint8_t  role;          /* enum swarm_role */
+    uint8_t  active_tasks;
+    uint16_t reserved;
 };
 
 #define SWARM_HEARTBEAT_MAGIC   0x434C4157  /* "CLAW" */
@@ -77,6 +90,10 @@ struct __attribute__((packed)) swarm_rpc_msg {
     char     tool_name[SWARM_RPC_TOOL_NAME_MAX];
     char     payload[SWARM_RPC_PAYLOAD_MAX];
 };
+
+/* Retry config for RPC calls */
+#define SWARM_RPC_MAX_RETRIES   3
+#define SWARM_RPC_RETRY_BASE_MS 500
 
 int  swarm_init(void);
 int  swarm_start(void);
