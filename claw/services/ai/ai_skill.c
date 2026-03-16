@@ -30,25 +30,16 @@ typedef struct {
 static ai_skill_t s_skills[SKILL_MAX];
 static int        s_count;
 
-/* --- NVS persistence (ESP-IDF only) --- */
+/* --- KV persistence (platform-independent via OSAL) --- */
 
-#ifdef CLAW_PLATFORM_ESP_IDF
-#include "nvs_flash.h"
-#include "nvs.h"
+#include "osal/claw_kv.h"
 
-#define SKILL_NVS_NS    "claw_skill"
-#define SKILL_NVS_CNT   "cnt"
-#define SKILL_NVS_DATA  "data"
+#define SKILL_KV_NS    "claw_skill"
+#define SKILL_KV_CNT   "cnt"
+#define SKILL_KV_DATA  "data"
 
-static int skill_flush_nvs(void)
+static int skill_persist(void)
 {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(SKILL_NVS_NS, NVS_READWRITE, &h);
-    if (err != ESP_OK) {
-        CLAW_LOGE(TAG, "nvs_open: %s", esp_err_to_name(err));
-        return CLAW_ERROR;
-    }
-
     /* Count user-created skills */
     uint8_t cnt = 0;
     for (int i = 0; i < s_count; i++) {
@@ -57,13 +48,9 @@ static int skill_flush_nvs(void)
         }
     }
 
-    nvs_set_u8(h, SKILL_NVS_CNT, cnt);
+    claw_kv_set_u8(SKILL_KV_NS, SKILL_KV_CNT, cnt);
 
     if (cnt > 0) {
-        /*
-         * Pack user skills into a contiguous blob.
-         * Each entry: ai_skill_t (fixed size).
-         */
         ai_skill_t buf[SKILL_MAX];
         int idx = 0;
         for (int i = 0; i < s_count; i++) {
@@ -71,38 +58,26 @@ static int skill_flush_nvs(void)
                 memcpy(&buf[idx++], &s_skills[i], sizeof(ai_skill_t));
             }
         }
-        nvs_set_blob(h, SKILL_NVS_DATA, buf,
-                     idx * sizeof(ai_skill_t));
-    } else {
-        nvs_erase_key(h, SKILL_NVS_DATA);
+        return claw_kv_set_blob(SKILL_KV_NS, SKILL_KV_DATA, buf,
+                                idx * sizeof(ai_skill_t));
     }
 
-    err = nvs_commit(h);
-    nvs_close(h);
-    return (err == ESP_OK) ? CLAW_OK : CLAW_ERROR;
+    claw_kv_delete(SKILL_KV_NS, SKILL_KV_DATA);
+    return CLAW_OK;
 }
 
-static void skill_load_nvs(void)
+static void skill_load(void)
 {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(SKILL_NVS_NS, NVS_READONLY, &h);
-    if (err != ESP_OK) {
-        return;
-    }
-
     uint8_t cnt = 0;
-    err = nvs_get_u8(h, SKILL_NVS_CNT, &cnt);
-    if (err != ESP_OK || cnt == 0) {
-        nvs_close(h);
+    if (claw_kv_get_u8(SKILL_KV_NS, SKILL_KV_CNT, &cnt) != CLAW_OK
+        || cnt == 0) {
         return;
     }
 
     ai_skill_t buf[SKILL_MAX];
     size_t blob_sz = cnt * sizeof(ai_skill_t);
-    err = nvs_get_blob(h, SKILL_NVS_DATA, buf, &blob_sz);
-    nvs_close(h);
-
-    if (err != ESP_OK) {
+    if (claw_kv_get_blob(SKILL_KV_NS, SKILL_KV_DATA,
+                         buf, &blob_sz) != CLAW_OK) {
         return;
     }
 
@@ -112,15 +87,8 @@ static void skill_load_nvs(void)
         s_count++;
     }
 
-    CLAW_LOGI(TAG, "restored %d user skill(s) from NVS", (int)cnt);
+    CLAW_LOGI(TAG, "restored %d user skill(s) from KV", (int)cnt);
 }
-
-#else /* non-ESP-IDF */
-
-static int  skill_flush_nvs(void) { return CLAW_OK; }
-static void skill_load_nvs(void)  {}
-
-#endif
 
 /* --- Built-in skill registration --- */
 
@@ -161,7 +129,7 @@ int ai_skill_init(void)
     s_count = 0;
 
     register_builtins();
-    skill_load_nvs();
+    skill_load();
 
     CLAW_LOGI(TAG, "initialized, %d skill(s)", s_count);
     return CLAW_OK;
@@ -209,7 +177,7 @@ int ai_skill_remove(const char *name)
             }
             s_count--;
             memset(&s_skills[s_count], 0, sizeof(ai_skill_t));
-            skill_flush_nvs();
+            skill_persist();
             CLAW_LOGI(TAG, "removed skill: %s", name);
             return CLAW_OK;
         }
@@ -315,7 +283,7 @@ static int tool_create_skill(const cJSON *params, cJSON *result)
         return CLAW_ERROR;
     }
 
-    skill_flush_nvs();
+    skill_persist();
 
     cJSON_AddStringToObject(result, "status", "ok");
     char msg[64];

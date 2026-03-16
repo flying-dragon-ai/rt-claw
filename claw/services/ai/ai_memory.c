@@ -229,102 +229,51 @@ typedef struct {
 static ltm_entry_t s_ltm[LTM_MAX_ENTRIES];
 static int         s_ltm_count;
 
-#ifdef CLAW_PLATFORM_ESP_IDF
+#include "osal/claw_kv.h"
 
-#include "nvs_flash.h"
-#include "nvs.h"
+#define LTM_KV_NS    "claw_ltm"
+#define LTM_KV_DATA  "data"
+#define LTM_KV_CNT   "cnt"
 
-#define LTM_NVS_NAMESPACE  "claw_ltm"
-#define LTM_NVS_KEY_DATA   "data"
-#define LTM_NVS_KEY_COUNT  "cnt"
-
-static int ltm_flush_nvs(void)
+static int ltm_persist(void)
 {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(LTM_NVS_NAMESPACE, NVS_READWRITE, &h);
-    if (err != ESP_OK) {
-        CLAW_LOGE(TAG, "nvs_open failed: %s", esp_err_to_name(err));
+    if (claw_kv_set_u8(LTM_KV_NS, LTM_KV_CNT,
+                       (uint8_t)s_ltm_count) != CLAW_OK) {
         return CLAW_ERROR;
     }
-
-    nvs_set_u8(h, LTM_NVS_KEY_COUNT, (uint8_t)s_ltm_count);
-    nvs_set_blob(h, LTM_NVS_KEY_DATA, s_ltm,
-                 s_ltm_count * sizeof(ltm_entry_t));
-    err = nvs_commit(h);
-    nvs_close(h);
-
-    if (err != ESP_OK) {
-        CLAW_LOGE(TAG, "nvs_commit failed: %s", esp_err_to_name(err));
-        return CLAW_ERROR;
-    }
-    return CLAW_OK;
+    return claw_kv_set_blob(LTM_KV_NS, LTM_KV_DATA, s_ltm,
+                            s_ltm_count * sizeof(ltm_entry_t));
 }
 
-static int ltm_load_nvs(void)
+static void ltm_load(void)
 {
-    nvs_handle_t h;
-    esp_err_t err = nvs_open(LTM_NVS_NAMESPACE, NVS_READONLY, &h);
-    if (err == ESP_ERR_NVS_NOT_FOUND) {
-        s_ltm_count = 0;
-        return CLAW_OK;
-    }
-    if (err != ESP_OK) {
-        CLAW_LOGE(TAG, "nvs_open failed: %s", esp_err_to_name(err));
-        return CLAW_ERROR;
-    }
-
     uint8_t cnt = 0;
-    err = nvs_get_u8(h, LTM_NVS_KEY_COUNT, &cnt);
-    if (err != ESP_OK) {
-        nvs_close(h);
+    if (claw_kv_get_u8(LTM_KV_NS, LTM_KV_CNT, &cnt) != CLAW_OK) {
         s_ltm_count = 0;
-        return CLAW_OK;
+        return;
     }
-
     if (cnt > LTM_MAX_ENTRIES) {
         cnt = LTM_MAX_ENTRIES;
     }
-
     size_t blob_size = cnt * sizeof(ltm_entry_t);
-    err = nvs_get_blob(h, LTM_NVS_KEY_DATA, s_ltm, &blob_size);
-    nvs_close(h);
-
-    if (err == ESP_OK) {
+    if (claw_kv_get_blob(LTM_KV_NS, LTM_KV_DATA,
+                         s_ltm, &blob_size) == CLAW_OK) {
         s_ltm_count = cnt;
     } else {
         s_ltm_count = 0;
     }
-
-    return CLAW_OK;
 }
-
-static int ltm_persist(void) { return ltm_flush_nvs(); }
 
 int ai_ltm_init(void)
 {
     memset(s_ltm, 0, sizeof(s_ltm));
     s_ltm_count = 0;
 
-    ltm_load_nvs();
-    CLAW_LOGI(TAG, "long-term initialized, %d/%d entries from flash",
+    ltm_load();
+    CLAW_LOGI(TAG, "long-term initialized, %d/%d entries",
               s_ltm_count, LTM_MAX_ENTRIES);
     return CLAW_OK;
 }
-
-#else /* non-ESP-IDF: RAM-only LTM */
-
-static int ltm_persist(void) { return CLAW_OK; }
-
-int ai_ltm_init(void)
-{
-    memset(s_ltm, 0, sizeof(s_ltm));
-    s_ltm_count = 0;
-    CLAW_LOGI(TAG, "long-term initialized (RAM-only), max=%d",
-              LTM_MAX_ENTRIES);
-    return CLAW_OK;
-}
-
-#endif
 
 int ai_ltm_save(const char *key, const char *value)
 {

@@ -7,6 +7,7 @@
  */
 
 #include "osal/claw_os.h"
+#include "osal/claw_kv.h"
 #include "claw/claw_init.h"
 #include "claw/services/ai/ai_engine.h"
 #include "claw/shell/shell_commands.h"
@@ -497,14 +498,8 @@ static void shell_loop(void)
 void app_main(void)
 {
 #ifdef CLAW_PLATFORM_ESP_IDF
-    /* Initialize NVS flash */
-    esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
-        err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_LOGW(TAG, "NVS truncated, erasing...");
-        nvs_flash_erase();
-        nvs_flash_init();
-    }
+    /* Initialize KV storage (wraps nvs_flash_init) */
+    claw_kv_init();
 
 #ifdef CONFIG_RTCLAW_SHELL_ENABLE
     esp_log_level_set("*", ESP_LOG_WARN);
