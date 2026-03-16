@@ -38,4 +38,10 @@ void heartbeat_post(const char *category, const char *message);
 void heartbeat_set_reply(heartbeat_reply_fn_t fn,
                          const char *target);
 
+/**
+ * Check whether the LLM API was reachable at the last heartbeat.
+ * Returns 1 (online), 0 (offline), or -1 (not yet checked).
+ */
+int heartbeat_llm_online(void);
+
 #endif /* CLAW_CORE_HEARTBEAT_H */

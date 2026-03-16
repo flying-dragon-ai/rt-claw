@@ -52,4 +52,13 @@ int ai_chat(const char *user_msg, char *reply, size_t reply_size);
  */
 int ai_chat_raw(const char *prompt, char *reply, size_t reply_size);
 
+/**
+ * Lightweight API connectivity check.
+ * Sends a minimal request (max_tokens=1) without acquiring the API
+ * lock, so it never blocks interactive ai_chat() calls.
+ * Returns CLAW_OK if the API responds (any HTTP status > 0),
+ * CLAW_ERROR on network failure or missing credentials.
+ */
+int ai_ping(void);
+
 #endif /* CLAW_SERVICES_AI_ENGINE_H */
