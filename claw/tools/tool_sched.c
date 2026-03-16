@@ -180,6 +180,7 @@ static void ai_worker_thread(void *arg)
             claw_mutex_unlock(s_rctx_lock);
         }
 
+        ai_set_channel(AI_CHANNEL_SCHED);
         if (ctx->reply_fn) {
             ai_set_channel_hint(
                 " This is a scheduled background task."
@@ -252,6 +253,7 @@ static void ai_worker_thread(void *arg)
         }
 
         claw_free(reply);
+        ai_set_channel(AI_CHANNEL_SHELL);
         ai_set_channel_hint(NULL);
 
         claw_mutex_lock(s_worker_lock, CLAW_WAIT_FOREVER);

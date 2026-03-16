@@ -18,10 +18,13 @@
 /* ---- Short-term memory (RAM ring buffer, conversation turns) ---- */
 
 int   ai_memory_init(void);
-void  ai_memory_add_message(const char *role, const char *content_json);
-cJSON *ai_memory_build_messages(void);  /* caller frees */
+void  ai_memory_add(const char *role, const char *content_json,
+                     int channel);
+cJSON *ai_memory_build(int channel);    /* caller frees */
+void  ai_memory_clear_channel(int channel);
 void  ai_memory_clear(void);
 int   ai_memory_count(void);
+int   ai_memory_count_channel(int channel);
 
 /* ---- Long-term memory (NVS Flash, persistent facts) ---- */
 

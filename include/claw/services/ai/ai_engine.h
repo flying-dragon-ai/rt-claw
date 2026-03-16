@@ -8,6 +8,13 @@
 
 #include "osal/claw_os.h"
 
+/* Channel IDs for conversation memory isolation */
+#define AI_CHANNEL_SHELL      0
+#define AI_CHANNEL_FEISHU     1
+#define AI_CHANNEL_TELEGRAM   2
+#define AI_CHANNEL_SCHED      3
+#define AI_CHANNEL_MAX        4
+
 /* Status phases for the progress callback */
 #define AI_STATUS_THINKING   0  /* waiting for API response */
 #define AI_STATUS_TOOL_CALL  1  /* executing a tool (detail = name) */
@@ -39,6 +46,15 @@ const char *ai_get_model(void);
  * The string is copied internally; caller may free after return.
  */
 void ai_set_channel_hint(const char *hint);
+
+/**
+ * Set the active channel ID for conversation memory isolation.
+ * Each channel maintains separate conversation history so messages
+ * from different sources (shell, Feishu, Telegram) don't mix.
+ * Use AI_CHANNEL_* constants from ai_memory.h.
+ */
+void ai_set_channel(int channel_id);
+int  ai_get_channel(void);
 
 /**
  * Send a user message to the LLM and receive a reply.

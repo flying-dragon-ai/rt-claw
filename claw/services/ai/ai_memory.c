@@ -7,6 +7,7 @@
 
 #include "osal/claw_os.h"
 #include "claw_config.h"
+#include "claw/services/ai/ai_engine.h"
 #include "claw/services/ai/ai_memory.h"
 
 #include <string.h>
@@ -30,23 +31,43 @@
 #endif
 
 typedef struct {
-    char  role[12];         /* "user" / "assistant" */
-    char *content_json;     /* heap: plain string or cJSON array string */
+    char    role[12];         /* "user" / "assistant" */
+    char   *content_json;     /* heap: plain string or cJSON array string */
+    uint8_t channel;          /* AI_CHANNEL_* */
 } mem_entry_t;
 
 static mem_entry_t s_entries[MEM_MAX_MSGS];
 static int         s_count;
 static claw_mutex_t s_lock;
 
-static void drop_oldest_pair(void)
+/*
+ * Drop the oldest user+assistant pair for a given channel.
+ * Falls back to dropping any oldest pair if no channel match.
+ */
+static void drop_oldest_pair_for(int channel)
 {
     if (s_count < 2) {
         return;
     }
 
+    /* Try to find a pair matching the target channel */
+    for (int i = 0; i < s_count - 1; i++) {
+        if (s_entries[i].channel == channel &&
+            s_entries[i + 1].channel == channel) {
+            claw_free(s_entries[i].content_json);
+            claw_free(s_entries[i + 1].content_json);
+            if (i + 2 < s_count) {
+                memmove(&s_entries[i], &s_entries[i + 2],
+                        (s_count - i - 2) * sizeof(mem_entry_t));
+            }
+            s_count -= 2;
+            return;
+        }
+    }
+
+    /* Fallback: drop the global oldest pair */
     claw_free(s_entries[0].content_json);
     claw_free(s_entries[1].content_json);
-
     memmove(&s_entries[0], &s_entries[2],
             (s_count - 2) * sizeof(mem_entry_t));
     s_count -= 2;
@@ -65,7 +86,8 @@ int ai_memory_init(void)
     return CLAW_OK;
 }
 
-void ai_memory_add_message(const char *role, const char *content_json)
+void ai_memory_add(const char *role, const char *content_json,
+                   int channel)
 {
     if (!role || !content_json) {
         return;
@@ -74,11 +96,12 @@ void ai_memory_add_message(const char *role, const char *content_json)
     claw_mutex_lock(s_lock, CLAW_WAIT_FOREVER);
 
     while (s_count >= MEM_MAX_MSGS) {
-        drop_oldest_pair();
+        drop_oldest_pair_for(channel);
     }
 
     mem_entry_t *e = &s_entries[s_count];
     snprintf(e->role, sizeof(e->role), "%s", role);
+    e->channel = (uint8_t)channel;
 
     size_t len = strlen(content_json);
     e->content_json = claw_malloc(len + 1);
@@ -90,7 +113,13 @@ void ai_memory_add_message(const char *role, const char *content_json)
     claw_mutex_unlock(s_lock);
 }
 
-cJSON *ai_memory_build_messages(void)
+/* Backward-compatible wrapper */
+void ai_memory_add_message(const char *role, const char *content_json)
+{
+    ai_memory_add(role, content_json, AI_CHANNEL_SHELL);
+}
+
+cJSON *ai_memory_build(int channel)
 {
     cJSON *messages = cJSON_CreateArray();
     if (!messages) {
@@ -101,6 +130,10 @@ cJSON *ai_memory_build_messages(void)
 
     for (int i = 0; i < s_count; i++) {
         mem_entry_t *e = &s_entries[i];
+        if (e->channel != channel) {
+            continue;
+        }
+
         cJSON *msg = cJSON_CreateObject();
         cJSON_AddStringToObject(msg, "role", e->role);
 
@@ -121,6 +154,46 @@ cJSON *ai_memory_build_messages(void)
 
     claw_mutex_unlock(s_lock);
     return messages;
+}
+
+cJSON *ai_memory_build_messages(void)
+{
+    return ai_memory_build(AI_CHANNEL_SHELL);
+}
+
+void ai_memory_clear_channel(int channel)
+{
+    claw_mutex_lock(s_lock, CLAW_WAIT_FOREVER);
+
+    int dst = 0;
+    for (int i = 0; i < s_count; i++) {
+        if (s_entries[i].channel == channel) {
+            claw_free(s_entries[i].content_json);
+            s_entries[i].content_json = NULL;
+        } else {
+            if (dst != i) {
+                s_entries[dst] = s_entries[i];
+            }
+            dst++;
+        }
+    }
+    s_count = dst;
+
+    claw_mutex_unlock(s_lock);
+    CLAW_LOGI(TAG, "channel %d memory cleared", channel);
+}
+
+int ai_memory_count_channel(int channel)
+{
+    int n = 0;
+    claw_mutex_lock(s_lock, CLAW_WAIT_FOREVER);
+    for (int i = 0; i < s_count; i++) {
+        if (s_entries[i].channel == channel) {
+            n++;
+        }
+    }
+    claw_mutex_unlock(s_lock);
+    return n;
 }
 
 void ai_memory_clear(void)

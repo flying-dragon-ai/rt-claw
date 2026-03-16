@@ -62,6 +62,7 @@ static char s_channel_hint[512];
  * Auto-detected from model name in ai_engine_init().
  */
 static int s_openai_compat;
+static int s_channel = AI_CHANNEL_SHELL;
 
 static inline void notify_status(int st, const char *detail)
 {
@@ -82,6 +83,18 @@ void ai_set_channel_hint(const char *hint)
     } else {
         s_channel_hint[0] = '\0';
     }
+}
+
+void ai_set_channel(int channel_id)
+{
+    if (channel_id >= 0 && channel_id < AI_CHANNEL_MAX) {
+        s_channel = channel_id;
+    }
+}
+
+int ai_get_channel(void)
+{
+    return s_channel;
 }
 
 static const char *SYSTEM_PROMPT =
@@ -689,7 +702,7 @@ int ai_chat(const char *user_msg, char *reply, size_t reply_size)
     }
 #endif
 
-    ai_memory_add_message("user", user_msg);
+    ai_memory_add("user", user_msg, s_channel);
 
     char *sys_prompt = build_system_prompt();
     if (!sys_prompt) {
@@ -697,7 +710,7 @@ int ai_chat(const char *user_msg, char *reply, size_t reply_size)
         return CLAW_ERROR;
     }
 
-    cJSON *messages = ai_memory_build_messages();
+    cJSON *messages = ai_memory_build(s_channel);
     cJSON *tools = claw_tools_to_json();
 
     int ret = ai_chat_with_messages(sys_prompt, messages, tools,
@@ -711,7 +724,7 @@ int ai_chat(const char *user_msg, char *reply, size_t reply_size)
      * "unexpected tool_use_id" errors on the next API call.
      */
     if (ret == CLAW_OK && reply[0] != '\0') {
-        ai_memory_add_message("assistant", reply);
+        ai_memory_add("assistant", reply, s_channel);
     }
 
     claw_free(sys_prompt);

@@ -334,6 +334,7 @@ static void tg_ai_worker(void *arg)
         /* Typing indicator before AI call */
         send_chat_action(in.chat_id);
 
+        ai_set_channel(AI_CHANNEL_TELEGRAM);
         ai_set_channel_hint(
             " You are communicating via Telegram."
             " All outputs (including scheduled task results)"
@@ -352,6 +353,7 @@ static void tg_ai_worker(void *arg)
                   (unsigned long)claw_tick_ms(), ret,
                   (unsigned)esp_get_free_heap_size());
 
+        ai_set_channel(AI_CHANNEL_SHELL);
         ai_set_channel_hint(NULL);
         sched_set_reply_context(NULL, NULL);
 

@@ -749,6 +749,7 @@ static void ai_worker_thread(void *arg)
             add_reaction(in.msg_id, "Typing");
         }
 
+        ai_set_channel(AI_CHANNEL_FEISHU);
         ai_set_channel_hint(
             " You are communicating via Feishu IM."
             " All outputs (including scheduled task results)"
@@ -768,6 +769,7 @@ static void ai_worker_thread(void *arg)
                   (unsigned long)claw_tick_ms(), ret,
                   (unsigned)esp_get_free_heap_size());
 
+        ai_set_channel(AI_CHANNEL_SHELL);
         ai_set_channel_hint(NULL);
         sched_set_reply_context(NULL, NULL);
 
