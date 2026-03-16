@@ -26,68 +26,44 @@
 #include "claw/services/swarm/swarm.h"
 #endif
 
-#ifdef CLAW_PLATFORM_ESP_IDF
-#include "nvs.h"
-#endif
+#include "osal/claw_kv.h"
 
-/* ---- NVS persistence (ESP-IDF only) ---- */
+/* ---- KV persistence (platform-independent via OSAL) ---- */
 
 void shell_nvs_save_str(const char *ns, const char *key, const char *val)
 {
-#ifdef CLAW_PLATFORM_ESP_IDF
-    nvs_handle_t nvs;
-
-    if (nvs_open(ns, NVS_READWRITE, &nvs) != ESP_OK) {
-        printf("[error] NVS open failed\n");
-        return;
+    if (claw_kv_set_str(ns, key, val) != CLAW_OK) {
+        printf("[error] KV save failed\n");
     }
-    nvs_set_str(nvs, key, val);
-    nvs_commit(nvs);
-    nvs_close(nvs);
-#else
-    (void)ns;
-    (void)key;
-    (void)val;
-#endif
 }
 
 void shell_nvs_config_load(void)
 {
-#ifdef CLAW_PLATFORM_ESP_IDF
-    nvs_handle_t nvs;
     char buf[256];
-    size_t len;
 
-    /* Load AI config from NVS (overrides compile-time defaults) */
-    if (nvs_open(SHELL_NVS_NS_AI, NVS_READONLY, &nvs) == ESP_OK) {
-        len = sizeof(buf);
-        if (nvs_get_str(nvs, "api_key", buf, &len) == ESP_OK) {
-            ai_set_api_key(buf);
-        }
-        len = sizeof(buf);
-        if (nvs_get_str(nvs, "api_url", buf, &len) == ESP_OK) {
-            ai_set_api_url(buf);
-        }
-        len = sizeof(buf);
-        if (nvs_get_str(nvs, "model", buf, &len) == ESP_OK) {
-            ai_set_model(buf);
-        }
-        nvs_close(nvs);
+    /* Load AI config from KV (overrides compile-time defaults) */
+    if (claw_kv_get_str(SHELL_NVS_NS_AI, "api_key",
+                        buf, sizeof(buf)) == CLAW_OK) {
+        ai_set_api_key(buf);
+    }
+    if (claw_kv_get_str(SHELL_NVS_NS_AI, "api_url",
+                        buf, sizeof(buf)) == CLAW_OK) {
+        ai_set_api_url(buf);
+    }
+    if (claw_kv_get_str(SHELL_NVS_NS_AI, "model",
+                        buf, sizeof(buf)) == CLAW_OK) {
+        ai_set_model(buf);
     }
 
-    /* Load Feishu config from NVS */
-    if (nvs_open(SHELL_NVS_NS_FEISHU, NVS_READONLY, &nvs) == ESP_OK) {
-        len = sizeof(buf);
-        if (nvs_get_str(nvs, "app_id", buf, &len) == ESP_OK) {
-            feishu_set_app_id(buf);
-        }
-        len = sizeof(buf);
-        if (nvs_get_str(nvs, "app_secret", buf, &len) == ESP_OK) {
-            feishu_set_app_secret(buf);
-        }
-        nvs_close(nvs);
+    /* Load Feishu config from KV */
+    if (claw_kv_get_str(SHELL_NVS_NS_FEISHU, "app_id",
+                        buf, sizeof(buf)) == CLAW_OK) {
+        feishu_set_app_id(buf);
     }
-#endif
+    if (claw_kv_get_str(SHELL_NVS_NS_FEISHU, "app_secret",
+                        buf, sizeof(buf)) == CLAW_OK) {
+        feishu_set_app_secret(buf);
+    }
 }
 
 /* ---- Common command handlers ---- */
