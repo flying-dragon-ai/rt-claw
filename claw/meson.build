@@ -61,6 +61,13 @@ endif
 if get_option('telegram')
     feature_defs += '-DCONFIG_RTCLAW_TELEGRAM_ENABLE'
 endif
+if get_option('ota')
+    feature_defs += '-DCONFIG_RTCLAW_OTA_ENABLE'
+    src_files += files(
+        'services/ota/ota_service.c',
+        'tools/tool_ota.c',
+    )
+endif
 
 rtclaw_lib = static_library('rtclaw', src_files,
     include_directories: [claw_root_inc, claw_inc] + platform_incs,
