@@ -2,6 +2,8 @@ option('osal', type: 'combo',
     choices: ['rtthread', 'freertos', 'none'],
     value: 'none',
     description: 'OSAL backend (none = library only, no OSAL compiled)')
+option('platform', type: 'string', value: '',
+    description: 'Target platform for full firmware build (zynq-a9)')
 option('rtthread_bsp', type: 'string', value: 'platform/vexpress-a9',
     description: 'RT-Thread BSP directory for rtconfig.h/lwipopts.h')
 option('rtthread_cpuport', type: 'string',

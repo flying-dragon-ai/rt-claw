@@ -42,9 +42,23 @@ if osal_backend == 'rtthread'
         is_system: true,
     )
 elif osal_backend == 'freertos'
-    # ESP-IDF defines and include paths are provided by the auto-generated
-    # cross.ini (scripts/gen-esp32c3-cross.py).  No platform_incs needed.
-    platform_defs += ['-DCLAW_PLATFORM_ESP_IDF']
+    _plat = get_option('platform')
+    if _plat == 'zynq-a9'
+        platform_defs += ['-DCLAW_PLATFORM_FREERTOS']
+        platform_incs += include_directories(
+            'vendor/os/freertos/include',
+            'vendor/os/freertos/portable/GCC/ARM_CA9',
+            'vendor/bsp/xilinx',
+            'vendor/bsp/xilinx/standalone/common',
+            'vendor/bsp/xilinx/standalone/cortexa9',
+            'vendor/bsp/xilinx/drivers/scugic',
+            'vendor/bsp/xilinx/drivers/scutimer',
+            'platform/zynq-a9',
+            is_system: true,
+        )
+    else
+        platform_defs += ['-DCLAW_PLATFORM_ESP_IDF']
+    endif
 endif
 
 # ---- Unified configuration via claw_config_generated.h ----
@@ -127,3 +141,8 @@ subdir('vendor/lib/cjson')
 subdir('osal')
 subdir('claw')
 subdir('tests/unit')
+
+_fw_plat = get_option('platform')
+if _fw_plat == 'zynq-a9'
+    subdir('platform/zynq-a9')
+endif

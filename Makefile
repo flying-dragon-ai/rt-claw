@@ -34,6 +34,10 @@ help:
 	@echo "  make vexpress-a9-qemu           Build QEMU vexpress-a9"
 	@echo "  make run-vexpress-a9-qemu       Build + launch vexpress-a9"
 	@echo ""
+	@echo "Zynq-A9 (FreeRTOS):"
+	@echo "  make build-zynq-a9-qemu         Build QEMU Zynq-A9"
+	@echo "  make run-zynq-a9-qemu           Build + launch Zynq-A9"
+	@echo ""
 	@echo "Options:"
 	@echo "  GDB=1       Debug mode (GDB port 1234)"
 	@echo "  GRAPHICS=1  LCD display window (QEMU only)"
@@ -43,6 +47,7 @@ help:
 	@echo ""
 	@echo "Tests (unit — cross-compiled, QEMU semihosting):"
 	@echo "  make test-unit             Build + run unit tests (vexpress-a9)"
+	@echo "  make test-unit-zynq        Build + run unit tests (zynq-a9)"
 	@echo ""
 	@echo "Tests (functional — requires pre-built firmware):"
 	@echo "  make test-functional       Run all functional tests"
@@ -55,6 +60,7 @@ help:
 	@echo "  make test-smoke-esp32c3    Smoke tests (ESP32-C3)"
 	@echo "  make test-smoke-esp32s3    Smoke tests (ESP32-S3)"
 	@echo "  make test-smoke-vexpress   Smoke tests (vexpress-a9)"
+	@echo "  make test-smoke-zynq       Smoke tests (zynq-a9)"
 	@echo "  make test-online-esp32c3   AI online tests (ESP32-C3)"
 	@echo "  make test-online-esp32s3   AI online tests (ESP32-S3)"
 	@echo ""
@@ -101,6 +107,42 @@ run-vexpress-a9-qemu: vexpress-a9-qemu
 		-sd $(A9_PLATFORM)/sd.bin \
 		-nic user,model=lan9118 \
 		$(if $(filter 1,$(GDB)),-S -s)
+
+# --- Zynq-A9 QEMU (FreeRTOS) ---
+MESON_BUILDDIR_ZYNQ := $(BUILD_DIR)/zynq-a9-qemu
+CROSS_FILE_ZYNQ     := platform/zynq-a9/cross.ini
+
+.PHONY: build-zynq-a9-qemu
+build-zynq-a9-qemu:
+	@if [ ! -f $(MESON_BUILDDIR_ZYNQ)/build.ninja ]; then \
+		meson setup $(MESON_BUILDDIR_ZYNQ) --cross-file $(CROSS_FILE_ZYNQ); \
+	fi
+	meson compile -C $(MESON_BUILDDIR_ZYNQ)
+	@echo "Output: $(MESON_BUILDDIR_ZYNQ)/platform/zynq-a9/rtclaw.elf"
+
+.PHONY: run-zynq-a9-qemu
+run-zynq-a9-qemu: build-zynq-a9-qemu
+	@if [ "$(GDB)" = "1" ]; then \
+		echo "Starting QEMU in debug mode (GDB port 1234)..."; \
+		echo "Connect: arm-none-eabi-gdb $(MESON_BUILDDIR_ZYNQ)/platform/zynq-a9/rtclaw.elf -ex 'target remote :1234'"; \
+	fi
+	qemu-system-arm \
+		-M xilinx-zynq-a9 \
+		-smp 1 \
+		-nographic \
+		-kernel $(MESON_BUILDDIR_ZYNQ)/platform/zynq-a9/rtclaw.elf \
+		-nic user,model=cadence_gem \
+		$(if $(filter 1,$(GDB)),-S -s)
+
+
+.PHONY: test-unit-zynq
+test-unit-zynq:
+	python3 tests/unit/run_zynq.py
+
+.PHONY: test-smoke-zynq
+test-smoke-zynq: build-zynq-a9-qemu
+	RTCLAW_TEST_PLATFORM=zynq-a9-qemu python3 -m unittest discover \
+		-s tests/functional -p 'test_boot.py' -v
 
 # --- ESP32-C3 unified targets ---
 # Prerequisite: source $$HOME/esp/esp-idf/export.sh

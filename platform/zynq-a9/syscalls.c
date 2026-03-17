@@ -1,0 +1,136 @@
+/* SPDX-License-Identifier: MIT */
+/*
+ * Minimal newlib syscall stubs for bare-metal Zynq QEMU.
+ * _write uses UART0 directly for printf output.
+ */
+
+#include <sys/stat.h>
+#include <errno.h>
+
+/*
+ * Zynq PS UART (Cadence UART) registers.
+ * QEMU maps UART0 at 0xE0000000, UART1 at 0xE0001000.
+ * -nographic connects the first UART to stdio.
+ */
+#define UART_BASE  0xE0000000U
+
+/* Cadence UART register offsets */
+#define UART_CR    (*(volatile unsigned int *)(UART_BASE + 0x00))
+#define UART_MR    (*(volatile unsigned int *)(UART_BASE + 0x04))
+#define UART_SR    (*(volatile unsigned int *)(UART_BASE + 0x2C))
+#define UART_FIFO  (*(volatile unsigned int *)(UART_BASE + 0x30))
+
+#define UART_CR_TX_EN   (1U << 4)
+#define UART_CR_RX_EN   (1U << 2)
+#define UART_SR_TXFULL  (1U << 4)
+
+static int uart_inited = 0;
+
+static void uart_init(void)
+{
+    if (!uart_inited) {
+        /* Enable TX and RX */
+        UART_CR = UART_CR_TX_EN | UART_CR_RX_EN;
+        uart_inited = 1;
+    }
+}
+
+int _write(int fd, const char *buf, int len)
+{
+    (void)fd;
+    uart_init();
+    for (int i = 0; i < len; i++) {
+        while (UART_SR & UART_SR_TXFULL) {
+            /* wait */
+        }
+        UART_FIFO = (unsigned int)buf[i];
+    }
+    return len;
+}
+
+int _read(int fd, char *buf, int len)
+{
+    (void)fd; (void)buf; (void)len;
+    return 0;
+}
+
+int _close(int fd)
+{
+    (void)fd;
+    return -1;
+}
+
+int _lseek(int fd, int offset, int whence)
+{
+    (void)fd; (void)offset; (void)whence;
+    return 0;
+}
+
+int _fstat(int fd, struct stat *st)
+{
+    (void)fd;
+    st->st_mode = S_IFCHR;
+    return 0;
+}
+
+int _isatty(int fd)
+{
+    (void)fd;
+    return 1;
+}
+
+void *_sbrk(int incr)
+{
+    extern char _heap_start;
+    extern char _heap_end;
+    static char *heap_ptr = 0;
+
+    if (heap_ptr == 0) {
+        heap_ptr = &_heap_start;
+    }
+
+    char *prev = heap_ptr;
+    if (heap_ptr + incr > &_heap_end) {
+        errno = ENOMEM;
+        return (void *)-1;
+    }
+    heap_ptr += incr;
+    return prev;
+}
+
+void _exit(int status)
+{
+    (void)status;
+    while (1) {
+        /* halt */
+    }
+}
+
+int _kill(int pid, int sig)
+{
+    (void)pid; (void)sig;
+    errno = EINVAL;
+    return -1;
+}
+
+int _getpid(void)
+{
+    return 1;
+}
+
+void _init(void) {}
+void _fini(void) {}
+
+/* Xilinx BSP stubs for single-core QEMU */
+#include "xil_types.h"
+
+int Xil_IsSpinLockEnabled(void) { return 0; }
+void Xil_SpinLock(void) {}
+void Xil_SpinUnlock(void) {}
+void XTime_SetTime(u64 time) { (void)time; }
+u32 XGetCoreId(void) { return 0; }
+
+/* ARM exception handler stubs */
+void FIQInterrupt(void) { while (1); }
+void DataAbortInterrupt(void) { while (1); }
+void PrefetchAbortInterrupt(void) { while (1); }

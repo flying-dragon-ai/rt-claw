@@ -2,16 +2,21 @@
  * Copyright (c) 2026, Chao Liu <chao.liu.zevorn@gmail.com>
  * SPDX-License-Identifier: MIT
  *
- * OSAL network — ESP-IDF implementation using esp_http_client.
+ * OSAL network — FreeRTOS implementation.
+ *   ESP-IDF:     uses esp_http_client (full HTTPS)
+ *   Standalone:  stub (network added in later phase)
  */
 
 #include "osal/claw_os.h"
 #include "osal/claw_net.h"
 
+#include <string.h>
+
+#ifdef CLAW_PLATFORM_ESP_IDF
+
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 
-#include <string.h>
 
 #define TAG "net_http"
 #define HTTP_TIMEOUT_MS 60000
@@ -129,5 +134,42 @@ int claw_net_get(const char *url,
     if (resp_len) {
         *resp_len = ctx.len;
     }
+    if (resp_len) {
+        *resp_len = ctx.len;
+    }
     return status;
 }
+
+#else /* Standalone FreeRTOS stub */
+
+#define TAG "net_stub"
+
+int claw_net_post(const char *url,
+                  const claw_net_header_t *headers, int header_count,
+                  const char *body, size_t body_len,
+                  char *resp, size_t resp_size, size_t *resp_len)
+{
+    (void)url; (void)headers; (void)header_count;
+    (void)body; (void)body_len;
+    (void)resp; (void)resp_size;
+    if (resp_len) {
+        *resp_len = 0;
+    }
+    CLAW_LOGW(TAG, "net_post: not implemented (standalone FreeRTOS)");
+    return CLAW_ERROR;
+}
+
+int claw_net_get(const char *url,
+                 const claw_net_header_t *headers, int header_count,
+                 char *resp, size_t resp_size, size_t *resp_len)
+{
+    (void)url; (void)headers; (void)header_count;
+    (void)resp; (void)resp_size;
+    if (resp_len) {
+        *resp_len = 0;
+    }
+    CLAW_LOGW(TAG, "net_get: not implemented (standalone FreeRTOS)");
+    return CLAW_ERROR;
+}
+
+#endif /* CLAW_PLATFORM_ESP_IDF */
