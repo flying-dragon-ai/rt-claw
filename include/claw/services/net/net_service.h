@@ -10,4 +10,10 @@
 
 int net_service_init(void);
 
+/*
+ * Print IP address info to stdout.
+ * Output format varies by platform but always includes IP, netmask, gateway.
+ */
+void net_print_ipinfo(void);
+
 #endif /* CLAW_SERVICES_NET_SERVICE_H */

@@ -165,24 +165,66 @@ int net_service_init(void)
     return CLAW_OK;
 }
 
+void net_print_ipinfo(void)
+{
+    esp_netif_ip_info_t info;
+
+    if (s_eth_netif &&
+        esp_netif_get_ip_info(s_eth_netif, &info) == ESP_OK &&
+        info.ip.addr != 0) {
+        printf("  ip:      " IPSTR "\n", IP2STR(&info.ip));
+        printf("  netmask: " IPSTR "\n", IP2STR(&info.netmask));
+        printf("  gateway: " IPSTR "\n", IP2STR(&info.gw));
+    } else {
+        printf("  (no IP address)\n");
+    }
+}
+
 #elif defined(CLAW_PLATFORM_ESP_IDF)
 /*
  * ESP-IDF without Ethernet (WiFi-only, real hardware).
  * Network is initialized by platform main.c (wifi_manager).
  */
+
+#include "esp_netif.h"
+
 int net_service_init(void)
 {
     CLAW_LOGI(TAG, "network service ready (WiFi managed by platform)");
     return CLAW_OK;
 }
 
+void net_print_ipinfo(void)
+{
+    esp_netif_t *netif = NULL;
+    int found = 0;
+
+    while ((netif = esp_netif_next_unsafe(netif)) != NULL) {
+        esp_netif_ip_info_t info;
+        if (esp_netif_get_ip_info(netif, &info) == ESP_OK &&
+            info.ip.addr != 0) {
+            const char *desc = esp_netif_get_desc(netif);
+            printf("  %s:\n", desc ? desc : "netif");
+            printf("    ip:      " IPSTR "\n", IP2STR(&info.ip));
+            printf("    netmask: " IPSTR "\n", IP2STR(&info.netmask));
+            printf("    gateway: " IPSTR "\n", IP2STR(&info.gw));
+            found = 1;
+        }
+    }
+    if (!found) {
+        printf("  (no IP address)\n");
+    }
+}
+
 #elif defined(CLAW_PLATFORM_RTTHREAD)
 
 #include "claw/platform_net.h"
 
+#include <stdio.h>
 #include <rtthread.h>
 #include <netif/ethernetif.h>
 #include "lwip/ip4_addr.h"
+#include "lwip/netif.h"
 
 const char *claw_platform_net_device_name(void) __attribute__((weak));
 void claw_platform_net_prepare(void) __attribute__((weak));
@@ -276,12 +318,32 @@ int net_service_init(void)
     return CLAW_OK;
 }
 
+void net_print_ipinfo(void)
+{
+    struct netif *nif = netif_default;
+
+    if (nif && nif->ip_addr.addr != 0) {
+        printf("  ip:      %s\n", ip4addr_ntoa(&nif->ip_addr));
+        printf("  netmask: %s\n", ip4addr_ntoa(&nif->netmask));
+        printf("  gateway: %s\n", ip4addr_ntoa(&nif->gw));
+    } else {
+        printf("  (no IP address)\n");
+    }
+}
+
 #else /* unknown platform */
+
+#include <stdio.h>
 
 int net_service_init(void)
 {
     CLAW_LOGI(TAG, "service initialized (network backend pending)");
     return CLAW_OK;
+}
+
+void net_print_ipinfo(void)
+{
+    printf("  (not available on this platform)\n");
 }
 
 #endif
