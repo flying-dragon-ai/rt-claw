@@ -711,3 +711,48 @@ static void prvEMACHandlerTask( void * pvParameters )
     }
 }
 /*-----------------------------------------------------------*/
+
+/*
+ * QEMU Zynq-7000 GEM ISR workaround:
+ * The Xilinx BSP reads ISR (offset 0x24) twice — once as "RegISR" and
+ * once as "RegQiISR[0]" via XEmacPs_GetQxOffset(INTQI_STS, 0) which
+ * maps to the same offset.  Cadence GEM ISR is read-clear, so the
+ * second read returns 0 and no handlers are ever called.
+ *
+ * Override XEmacPs_IntrHandler with a version that reads ISR only once.
+ */
+void XEmacPs_IntrHandler(void *XEmacPsPtr)
+{
+    XEmacPs *inst = (XEmacPs *)XEmacPsPtr;
+    u32 isr = XEmacPs_ReadReg(inst->Config.BaseAddress, XEMACPS_ISR_OFFSET);
+
+    /* Clear pending bits */
+    XEmacPs_WriteReg(inst->Config.BaseAddress, XEMACPS_ISR_OFFSET, isr);
+
+    /* RX complete */
+    if (isr & XEMACPS_IXR_FRAMERX_MASK) {
+        XEmacPs_WriteReg(inst->Config.BaseAddress, XEMACPS_RXSR_OFFSET,
+                         XEMACPS_RXSR_FRAMERX_MASK | XEMACPS_RXSR_BUFFNA_MASK);
+        inst->RecvHandler(inst->RecvRef);
+    }
+
+    /* TX complete */
+    if (isr & XEMACPS_IXR_TXCOMPL_MASK) {
+        XEmacPs_WriteReg(inst->Config.BaseAddress, XEMACPS_TXSR_OFFSET,
+                         XEMACPS_TXSR_TXCOMPL_MASK | XEMACPS_TXSR_USEDREAD_MASK);
+        inst->SendHandler(inst->SendRef);
+    }
+
+    /* Errors */
+    if (isr & (XEMACPS_IXR_TX_ERR_MASK | XEMACPS_IXR_RX_ERR_MASK)) {
+        u8 dir = 0;
+        u32 err = isr & (XEMACPS_IXR_TX_ERR_MASK | XEMACPS_IXR_RX_ERR_MASK);
+        if (isr & XEMACPS_IXR_TX_ERR_MASK) {
+            dir = XEMACPS_SEND;
+        }
+        if (isr & XEMACPS_IXR_RX_ERR_MASK) {
+            dir = XEMACPS_RECV;
+        }
+        inst->ErrorHandler(inst->ErrorRef, dir, err);
+    }
+}
