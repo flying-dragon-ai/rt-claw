@@ -61,7 +61,7 @@ static const claw_service_t s_services[] = {
     { "ai_skill",  ai_skill_init,    NULL,              NULL },
 #endif
 #ifdef CONFIG_RTCLAW_HEARTBEAT_ENABLE
-    { "heartbeat", heartbeat_init,   NULL,              NULL },
+    { "heartbeat", heartbeat_init,   NULL,              heartbeat_stop },
 #endif
 #ifdef CONFIG_RTCLAW_FEISHU_ENABLE
     { "feishu",    feishu_init,      feishu_start,      feishu_stop },

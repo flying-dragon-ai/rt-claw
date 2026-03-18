@@ -1142,19 +1142,28 @@ static void feishu_thread(void *arg)
     int retries = 0;
 
     while (refresh_token() != CLAW_OK) {
-        retries++;
-        if (retries >= TOKEN_MAX_RETRIES) {
-            CLAW_LOGE(TAG, "token fetch failed after %d retries, "
-                      "giving up", retries);
+        if (claw_thread_should_exit()) {
             return;
         }
-        CLAW_LOGW(TAG, "token fetch failed, retry in 10s");
+        retries++;
+        if (retries >= TOKEN_MAX_RETRIES) {
+            CLAW_LOGE(TAG, "token failed after %d retries",
+                      retries);
+            return;
+        }
+        CLAW_LOGW(TAG, "token failed, retry in 10s");
         claw_thread_delay_ms(10000);
+    }
+    if (claw_thread_should_exit()) {
+        return;
     }
     CLAW_LOGI(TAG, "token acquired");
 
     /* Connect WebSocket long connection */
     while (connect_ws() != CLAW_OK) {
+        if (claw_thread_should_exit()) {
+            return;
+        }
         CLAW_LOGW(TAG, "ws connect failed, retry in %dms",
                   WS_RECONNECT_MS);
         claw_thread_delay_ms(WS_RECONNECT_MS);

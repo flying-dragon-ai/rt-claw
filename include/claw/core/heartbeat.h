@@ -20,6 +20,7 @@ typedef void (*heartbeat_reply_fn_t)(const char *target,
  * Requires scheduler to be initialized first.
  */
 int heartbeat_init(void);
+void heartbeat_stop(void);
 
 /**
  * Post an event for the next heartbeat check.

@@ -107,10 +107,20 @@ void claw_thread_delete(claw_thread_t thread)
 
 void claw_thread_delay_ms(uint32_t ms)
 {
-    struct timespec ts;
-    ts.tv_sec  = ms / 1000;
-    ts.tv_nsec = (long)(ms % 1000) * 1000000L;
-    nanosleep(&ts, NULL);
+    /*
+     * Sleep in 200ms chunks so cooperative exit via
+     * claw_thread_should_exit() is responsive.
+     */
+    uint32_t remaining = ms;
+
+    while (remaining > 0 && !claw_thread_should_exit()) {
+        uint32_t chunk = (remaining > 200) ? 200 : remaining;
+        struct timespec ts;
+        ts.tv_sec  = chunk / 1000;
+        ts.tv_nsec = (long)(chunk % 1000) * 1000000L;
+        nanosleep(&ts, NULL);
+        remaining -= chunk;
+    }
 }
 
 void claw_thread_yield(void)
