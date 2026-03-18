@@ -1,24 +1,8 @@
 name: CI Online Integration
+# Disabled: AI API tests are inherently flaky (HTTP 503, rate limits, etc.)
+# and cause false-negative CI failures. Run manually when needed.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'claw/**'
-      - 'osal/**'
-      - 'include/**'
-      - 'drivers/**'
-      - 'platform/esp32c3/**'
-      - 'platform/esp32s3/**'
-      - 'platform/common/**'
-      - 'scripts/**'
-      - 'tests/**'
-      - 'Makefile'
-      - 'meson.build'
-      - 'meson_options.txt'
-      - '.github/workflows/ci-online-integration.yml'
-  schedule:
-    - cron: '30 18 * * *'
   workflow_dispatch:
 
 permissions:
