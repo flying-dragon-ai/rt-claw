@@ -17,6 +17,12 @@ static int tool_ota_check(const cJSON *params, cJSON *result)
 {
     (void)params;
 
+    if (!claw_ota_supported()) {
+        cJSON_AddStringToObject(result, "error",
+            "OTA not supported on this platform");
+        return CLAW_OK;
+    }
+
     claw_ota_info_t info;
     int ret = ota_check_update(&info);
 
@@ -42,6 +48,12 @@ static int tool_ota_check(const cJSON *params, cJSON *result)
 
 static int tool_ota_update(const cJSON *params, cJSON *result)
 {
+    if (!claw_ota_supported()) {
+        cJSON_AddStringToObject(result, "error",
+            "OTA not supported on this platform");
+        return CLAW_OK;
+    }
+
     cJSON *url_j = cJSON_GetObjectItem(params, "url");
 
     if (url_j && cJSON_IsString(url_j) &&
@@ -107,15 +119,22 @@ static int tool_ota_rollback(const cJSON *params, cJSON *result)
 {
     (void)params;
 
+    if (!claw_ota_supported()) {
+        cJSON_AddStringToObject(result, "error",
+            "OTA not supported on this platform");
+        return CLAW_OK;
+    }
+
+    if (claw_ota_rollback() != CLAW_OK) {
+        cJSON_AddStringToObject(result, "error",
+                                "rollback failed");
+        return CLAW_OK;
+    }
+
     cJSON_AddStringToObject(result, "status", "ok");
     cJSON_AddStringToObject(result, "message",
-                            "Rolling back firmware and rebooting...");
-
-    /* Let the response be sent before reboot */
+        "Rolling back firmware and rebooting...");
     claw_thread_delay_ms(1000);
-    claw_ota_rollback();
-
-    /* Not reached if rollback reboots */
     return CLAW_OK;
 }
 

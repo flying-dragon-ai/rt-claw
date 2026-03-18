@@ -61,6 +61,13 @@ int claw_tools_init(void)
     return CLAW_OK;
 }
 
+void claw_tools_stop(void)
+{
+#ifdef CONFIG_RTCLAW_TOOL_SCHED
+    sched_tool_stop();
+#endif
+}
+
 #ifdef CONFIG_RTCLAW_AUDIO_ENABLE
 /* ---- Audio tools (requires CONFIG_RTCLAW_AUDIO_ENABLE) ---- */
 

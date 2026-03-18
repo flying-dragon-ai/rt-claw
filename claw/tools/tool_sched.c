@@ -55,6 +55,7 @@ typedef struct {
 static sched_ai_ctx_t s_ctx[SCHED_AI_MAX];
 
 /* Worker thread state */
+static claw_thread_t s_ai_worker;
 static claw_sem_t   s_worker_sem;
 static claw_mutex_t s_worker_lock;
 static sched_ai_ctx_t *s_pending_ctx;
@@ -541,8 +542,9 @@ void claw_tools_register_sched(void)
     s_worker_lock = claw_mutex_create("sched_w");
     s_rctx_lock = claw_mutex_create("sched_rc");
 
-    claw_thread_create("sched_ai", ai_worker_thread, NULL,
-                       WORKER_STACK, WORKER_PRIO);
+    s_ai_worker = claw_thread_create("sched_ai",
+        ai_worker_thread, NULL,
+        WORKER_STACK, WORKER_PRIO);
 
     claw_tool_register("list_tasks",
         "List all active scheduled tasks with their names, "
@@ -567,6 +569,26 @@ void claw_tools_register_sched(void)
     sched_nvs_restore();
 }
 
+void sched_tool_stop(void)
+{
+    if (s_ai_worker) {
+        claw_thread_delete(s_ai_worker);
+        s_ai_worker = NULL;
+    }
+    if (s_worker_sem) {
+        claw_sem_delete(s_worker_sem);
+        s_worker_sem = NULL;
+    }
+    if (s_worker_lock) {
+        claw_mutex_delete(s_worker_lock);
+        s_worker_lock = NULL;
+    }
+    if (s_rctx_lock) {
+        claw_mutex_delete(s_rctx_lock);
+        s_rctx_lock = NULL;
+    }
+}
+
 #else
 
 void claw_tools_register_sched(void)
@@ -584,5 +606,7 @@ int sched_tool_remove_by_name(const char *name)
     (void)name;
     return -1;
 }
+
+void sched_tool_stop(void) {}
 
 #endif

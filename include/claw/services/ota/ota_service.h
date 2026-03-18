@@ -17,6 +17,7 @@ extern "C" {
 /* Service lifecycle (registered in claw_init.c) */
 int  ota_service_init(void);
 int  ota_service_start(void);
+void ota_service_stop(void);
 
 /*
  * Parse OTA version-check JSON into info struct.

@@ -38,6 +38,7 @@ typedef struct {
  * Initialize tool registry. Call once at startup.
  */
 int claw_tools_init(void);
+void claw_tools_stop(void);
 
 /**
  * Register a tool. Returns CLAW_OK or CLAW_ERROR if full.
@@ -120,6 +121,7 @@ void sched_set_reply_context(sched_reply_fn_t fn, const char *target);
  * Callable from shell commands.
  */
 int sched_tool_remove_by_name(const char *name);
+void sched_tool_stop(void);
 
 /**
  * Register network tools (http_request).

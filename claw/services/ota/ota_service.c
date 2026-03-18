@@ -23,6 +23,8 @@
 
 #define TAG "ota"
 
+static claw_thread_t s_check_thread;
+
 /* Accessed from OTA worker thread and main thread */
 static volatile Claw_OtaState s_state = CLAW_OTA_IDLE;
 
@@ -292,12 +294,21 @@ int ota_service_init(void)
 int ota_service_start(void)
 {
 #if CONFIG_RTCLAW_OTA_CHECK_INTERVAL_MS > 0
-    if (!claw_thread_create("ota_check", ota_check_thread,
-                            NULL, 4096, 18)) {
+    s_check_thread = claw_thread_create("ota_check",
+        ota_check_thread, NULL, 4096, 18);
+    if (!s_check_thread) {
         CLAW_LOGW(TAG, "auto-check thread create failed");
     }
 #endif
     return CLAW_OK;
+}
+
+void ota_service_stop(void)
+{
+    if (s_check_thread) {
+        claw_thread_delete(s_check_thread);
+        s_check_thread = NULL;
+    }
 }
 
 #endif /* CONFIG_RTCLAW_OTA_ENABLE */

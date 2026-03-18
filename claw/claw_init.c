@@ -55,7 +55,7 @@ static const claw_service_t s_services[] = {
 #ifdef CONFIG_RTCLAW_LCD_ENABLE
     { "lcd",       claw_lcd_init,    NULL,              NULL },
 #endif
-    { "tools",     claw_tools_init,  NULL,              NULL },
+    { "tools",     claw_tools_init,  NULL,              claw_tools_stop },
     { "ai_engine", ai_engine_init,   NULL,              ai_engine_stop },
 #ifdef CONFIG_RTCLAW_SKILL_ENABLE
     { "ai_skill",  ai_skill_init,    NULL,              NULL },
@@ -70,7 +70,7 @@ static const claw_service_t s_services[] = {
     { "telegram",  telegram_init,    telegram_start,    telegram_stop },
 #endif
 #ifdef CONFIG_RTCLAW_OTA_ENABLE
-    { "ota",       ota_service_init, ota_service_start, NULL },
+    { "ota",       ota_service_init, ota_service_start, ota_service_stop },
 #endif
 };
 

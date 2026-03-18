@@ -1309,10 +1309,33 @@ int feishu_start(void)
 
 void feishu_stop(void)
 {
-    /* Close WebSocket to unblock recv loops */
+    /*
+     * Signal disconnected so main thread's recv loop
+     * exits on its next timeout cycle, then join threads
+     * before destroying handles.
+     */
+    s_ws_connected = 0;
+
 #ifdef CLAW_PLATFORM_ESP_IDF
+    /* ESP-IDF WS client has its own stop that unblocks */
     if (s_ws_client) {
         esp_websocket_client_stop(s_ws_client);
+    }
+#endif
+
+    /* Join threads first (they check exit flag) */
+    claw_thread_delete(s_main_thread);
+    s_main_thread = NULL;
+
+    claw_thread_delete(s_ai_thread);
+    s_ai_thread = NULL;
+
+    claw_thread_delete(s_out_thread);
+    s_out_thread = NULL;
+
+    /* Now safe to destroy handles — no thread using them */
+#ifdef CLAW_PLATFORM_ESP_IDF
+    if (s_ws_client) {
         esp_websocket_client_destroy(s_ws_client);
         s_ws_client = NULL;
     }
@@ -1322,16 +1345,6 @@ void feishu_stop(void)
         s_ws_curl = NULL;
     }
 #endif
-    s_ws_connected = 0;
-
-    claw_thread_delete(s_main_thread);
-    s_main_thread = NULL;
-
-    claw_thread_delete(s_ai_thread);
-    s_ai_thread = NULL;
-
-    claw_thread_delete(s_out_thread);
-    s_out_thread = NULL;
 
     if (s_inbound_q) {
         claw_mq_delete(s_inbound_q);
