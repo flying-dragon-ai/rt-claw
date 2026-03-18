@@ -15,6 +15,7 @@
 #include "claw/services/ai/ai_memory.h"
 #include "claw/tools/claw_tools.h"
 #include "claw/services/im/feishu.h"
+#include "claw/services/net/net_service.h"
 
 #ifdef CONFIG_RTCLAW_SKILL_ENABLE
 #include "claw/services/ai/ai_skill.h"
@@ -372,6 +373,14 @@ static void cmd_ota(int argc, char **argv)
 }
 #endif
 
+static void cmd_ip(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    printf("Network:\n");
+    net_print_ipinfo();
+}
+
 /* ---- Common command table ---- */
 
 const shell_cmd_t shell_common_commands[] = {
@@ -382,6 +391,7 @@ const shell_cmd_t shell_common_commands[] = {
     SHELL_CMD("/ai_status",     cmd_ai_status,     "Show AI config"),
     SHELL_CMD("/feishu_set",    cmd_feishu_set,    "Set Feishu creds (NVS)"),
     SHELL_CMD("/feishu_status", cmd_feishu_status, "Show Feishu config"),
+    SHELL_CMD("/ip",            cmd_ip,            "Show IP address"),
     SHELL_CMD("/remember",      cmd_remember,      "Save to long-term memory"),
     SHELL_CMD("/forget",        cmd_forget,        "Delete a long-term memory"),
     SHELL_CMD("/memories",      cmd_memories,      "List long-term memories"),
