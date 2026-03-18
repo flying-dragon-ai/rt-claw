@@ -10,12 +10,16 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#include "FreeRTOS_IP.h"
+#include "FreeRTOS_Sockets.h"
+#include "FreeRTOS_DHCP.h"
+#include "NetworkInterface.h"
+
 #include "xscugic.h"
 #include "xscutimer.h"
 #include "xil_cache.h"
 #include "xparameters.h"
 
-/* claw_init() may not be linked yet; forward declare */
 extern int claw_init(void);
 
 /*
@@ -37,11 +41,39 @@ static void init_platform(void);
 /* ------------------------------------------------------------------ */
 /* main — platform entry point                                        */
 /* ------------------------------------------------------------------ */
+/* Default network configuration (overridden by DHCP) */
+static const uint8_t ucIPAddress[4]      = { 10, 0, 2, 15 };
+static const uint8_t ucNetMask[4]        = { 255, 255, 255, 0 };
+static const uint8_t ucGateway[4]        = { 10, 0, 2, 2 };
+static const uint8_t ucDNSServer[4]      = { 10, 0, 2, 3 };
+static const uint8_t ucMACAddress[6]     = { 0x00, 0x0a, 0x35, 0x00, 0x01, 0x02 };
+
+static NetworkInterface_t xZynqIF;
+static NetworkEndPoint_t  xEndPoint;
+
+static void init_network(void)
+{
+    /* Fill in the network interface. */
+    extern NetworkInterface_t * pxZynq_FillInterfaceDescriptor(
+        BaseType_t xEMACIndex, NetworkInterface_t * pxInterface);
+    pxZynq_FillInterfaceDescriptor(0, &xZynqIF);
+    FreeRTOS_FillEndPoint(&xZynqIF, &xEndPoint,
+                          ucIPAddress, ucNetMask,
+                          ucGateway, ucDNSServer,
+                          ucMACAddress);
+    xEndPoint.bits.bWantDHCP = pdTRUE;
+
+    FreeRTOS_IPInit_Multi();
+    printf("[net] FreeRTOS+TCP initialized, waiting for DHCP...\n");
+}
+
 int main(void)
 {
     init_platform();
 
     printf("rt-claw: Zynq-A9 QEMU (FreeRTOS) - Real-Time Claw\n");
+
+    init_network();
 
     xTaskCreate(claw_main_task,
                 "claw_main",
@@ -83,6 +115,40 @@ static void init_platform(void)
      * fully emulated and can cause hangs.  QEMU runs fast enough
      * without caches for development.
      */
+}
+
+/* ================================================================== */
+/* FreeRTOS+TCP hooks                                                 */
+/* ================================================================== */
+
+void vApplicationIPNetworkEventHook_Multi(
+    eIPCallbackEvent_t eNetworkEvent,
+    struct xNetworkEndPoint *pxEndPoint)
+{
+    (void)pxEndPoint;
+    if (eNetworkEvent == eNetworkUp) {
+        uint32_t ip, mask, gw, dns;
+        FreeRTOS_GetEndPointConfiguration(&ip, &mask, &gw, &dns,
+                                          pxEndPoint);
+        printf("[net] network up: %d.%d.%d.%d\n",
+               (int)(ip & 0xFF), (int)((ip >> 8) & 0xFF),
+               (int)((ip >> 16) & 0xFF), (int)((ip >> 24) & 0xFF));
+    }
+}
+
+/* Legacy (non-Multi) hook — referenced by older code paths */
+void vApplicationIPNetworkEventHook(eIPCallbackEvent_t eNetworkEvent)
+{
+    (void)eNetworkEvent;
+}
+
+BaseType_t xApplicationDNSQueryHook_Multi(
+    struct xNetworkEndPoint *pxEndPoint,
+    const char *pcName)
+{
+    (void)pxEndPoint;
+    (void)pcName;
+    return pdFALSE;
 }
 
 /* ================================================================== */

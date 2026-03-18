@@ -6,3 +6,6 @@
 	path = vendor/os/freertos
 	url = https://github.com/FreeRTOS/FreeRTOS-Kernel.git
 	branch = V11.2.0
+[submodule "vendor/lib/freertos-plus-tcp"]
+	path = vendor/lib/freertos-plus-tcp
+	url = https://github.com/FreeRTOS/FreeRTOS-Plus-TCP.git

@@ -53,6 +53,9 @@ elif osal_backend == 'freertos'
             'vendor/bsp/xilinx/standalone/cortexa9',
             'vendor/bsp/xilinx/drivers/scugic',
             'vendor/bsp/xilinx/drivers/scutimer',
+            'vendor/bsp/xilinx/drivers/emacps',
+            'vendor/lib/freertos-plus-tcp/source/include',
+            'vendor/lib/freertos-plus-tcp/source/portable/Compiler/GCC',
             'platform/zynq-a9',
             is_system: true,
         )
