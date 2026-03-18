@@ -97,6 +97,7 @@ struct __attribute__((packed)) swarm_rpc_msg {
 
 int  swarm_init(void);
 int  swarm_start(void);
+void swarm_stop(void);
 uint32_t swarm_self_id(void);
 int  swarm_node_count(void);
 void swarm_list_nodes(void);

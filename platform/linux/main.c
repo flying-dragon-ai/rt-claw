@@ -14,6 +14,7 @@
 #include "claw/shell/shell_commands.h"
 
 extern int claw_init(void);
+extern void claw_deinit(void);
 extern void linux_shell_loop(void);
 
 volatile sig_atomic_t g_exit_flag;
@@ -41,7 +42,7 @@ int main(void)
     claw_init();
     linux_shell_loop();
 
-    CLAW_LOGI("main", "shutting down ...");
+    claw_deinit();
 
     return 0;
 }

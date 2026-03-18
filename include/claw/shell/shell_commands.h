@@ -28,7 +28,8 @@ void shell_nvs_config_load(void);
 void shell_nvs_save_str(const char *ns, const char *key, const char *val);
 
 /* NVS namespace constants */
-#define SHELL_NVS_NS_AI     "ai_config"
-#define SHELL_NVS_NS_FEISHU "feishu_cfg"
+#define SHELL_NVS_NS_AI       "ai_config"
+#define SHELL_NVS_NS_FEISHU   "feishu_cfg"
+#define SHELL_NVS_NS_TELEGRAM "telegram_cfg"
 
 #endif /* CLAW_SHELL_COMMANDS_H */

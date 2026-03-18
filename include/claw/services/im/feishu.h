@@ -9,8 +9,9 @@
 #ifndef CLAW_SERVICES_IM_FEISHU_H
 #define CLAW_SERVICES_IM_FEISHU_H
 
-int feishu_init(void);
-int feishu_start(void);
+int  feishu_init(void);
+int  feishu_start(void);
+void feishu_stop(void);
 
 /**
  * Runtime configuration — set Feishu credentials before feishu_init().

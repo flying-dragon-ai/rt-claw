@@ -44,37 +44,40 @@
  * Phase 2: start() for services that have a runtime phase.
  */
 static const claw_service_t s_services[] = {
-    { "gateway",     gateway_init,      NULL,          NULL },
+    { "gateway",   gateway_init,     NULL,              gateway_stop },
 #ifdef CONFIG_RTCLAW_SCHED_ENABLE
-    { "sched",       sched_init,        NULL,          NULL },
+    { "sched",     sched_init,       NULL,              sched_stop },
 #endif
 #ifdef CONFIG_RTCLAW_SWARM_ENABLE
-    { "swarm",       swarm_init,        swarm_start,   NULL },
+    { "swarm",     swarm_init,       swarm_start,       swarm_stop },
 #endif
-    { "net",         net_service_init,  NULL,          NULL },
+    { "net",       net_service_init, NULL,              NULL },
 #ifdef CONFIG_RTCLAW_LCD_ENABLE
-    { "lcd",         claw_lcd_init,     NULL,          NULL },
+    { "lcd",       claw_lcd_init,    NULL,              NULL },
 #endif
-    { "tools",       claw_tools_init,   NULL,          NULL },
-    { "ai_engine",   ai_engine_init,    NULL,          NULL },
+    { "tools",     claw_tools_init,  NULL,              NULL },
+    { "ai_engine", ai_engine_init,   NULL,              ai_engine_stop },
 #ifdef CONFIG_RTCLAW_SKILL_ENABLE
-    { "ai_skill",    ai_skill_init,     NULL,          NULL },
+    { "ai_skill",  ai_skill_init,    NULL,              NULL },
 #endif
 #ifdef CONFIG_RTCLAW_HEARTBEAT_ENABLE
-    { "heartbeat",   heartbeat_init,    NULL,          NULL },
+    { "heartbeat", heartbeat_init,   NULL,              NULL },
 #endif
 #ifdef CONFIG_RTCLAW_FEISHU_ENABLE
-    { "feishu",      feishu_init,       feishu_start,  NULL },
+    { "feishu",    feishu_init,      feishu_start,      feishu_stop },
 #endif
 #ifdef CONFIG_RTCLAW_TELEGRAM_ENABLE
-    { "telegram",    telegram_init,     telegram_start, NULL },
+    { "telegram",  telegram_init,    telegram_start,    telegram_stop },
 #endif
 #ifdef CONFIG_RTCLAW_OTA_ENABLE
-    { "ota",         ota_service_init,  ota_service_start, NULL },
+    { "ota",       ota_service_init, ota_service_start, NULL },
 #endif
 };
 
-#define SERVICE_COUNT (sizeof(s_services) / sizeof(s_services[0]))
+#define SERVICE_COUNT \
+    (sizeof(s_services) / sizeof(s_services[0]))
+
+static int s_init_ok[sizeof(s_services) / sizeof(s_services[0])];
 
 #ifdef CONFIG_RTCLAW_AI_BOOT_TEST
 #if !defined(CONFIG_RTCLAW_FEISHU_ENABLE) && \
@@ -114,14 +117,16 @@ int claw_init(void)
     for (size_t i = 0; i < SERVICE_COUNT; i++) {
         CLAW_LOGI(TAG, "init: %s", s_services[i].name);
         int ret = s_services[i].init();
+        s_init_ok[i] = (ret == CLAW_OK);
         if (ret != CLAW_OK) {
-            CLAW_LOGW(TAG, "%s init returned %d", s_services[i].name, ret);
+            CLAW_LOGW(TAG, "%s init failed (%d), skipping",
+                      s_services[i].name, ret);
         }
     }
 
-    /* Phase 2: start services that have a runtime phase */
+    /* Phase 2: start services that initialized successfully */
     for (size_t i = 0; i < SERVICE_COUNT; i++) {
-        if (s_services[i].start) {
+        if (s_services[i].start && s_init_ok[i]) {
             CLAW_LOGI(TAG, "start: %s", s_services[i].name);
             s_services[i].start();
         }
@@ -142,4 +147,19 @@ int claw_init(void)
 #endif
 
     return CLAW_OK;
+}
+
+void claw_deinit(void)
+{
+    CLAW_LOGI(TAG, "shutting down services ...");
+
+    /* Stop in reverse order */
+    for (int i = (int)SERVICE_COUNT - 1; i >= 0; i--) {
+        if (s_services[i].stop && s_init_ok[i]) {
+            CLAW_LOGI(TAG, "stop: %s", s_services[i].name);
+            s_services[i].stop();
+        }
+    }
+
+    CLAW_LOGI(TAG, "all services stopped");
 }

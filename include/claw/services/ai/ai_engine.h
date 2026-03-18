@@ -24,7 +24,8 @@ typedef void (*ai_status_cb_t)(int status, const char *detail);
 
 void ai_set_status_cb(ai_status_cb_t cb);
 
-int ai_engine_init(void);
+int  ai_engine_init(void);
+void ai_engine_stop(void);
 
 /**
  * Runtime configuration — update API credentials without recompiling.

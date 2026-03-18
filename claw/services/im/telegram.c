@@ -66,6 +66,9 @@ static char s_api_base[API_BASE_MAX];
 static int64_t s_update_offset;
 static claw_mq_t s_inbound_q;
 static claw_mq_t s_outbound_q;
+static claw_thread_t s_ai_thread;
+static claw_thread_t s_out_thread;
+static claw_thread_t s_poll_thread;
 
 /* ------------------------------------------------------------------ */
 /*  Message structures                                                 */
@@ -491,8 +494,8 @@ int telegram_init(void)
     }
 
     if (s_bot_token[0] == '\0') {
-        CLAW_LOGW(TAG, "no bot token configured, service disabled");
-        return CLAW_OK;
+        CLAW_LOGE(TAG, "no bot token configured");
+        return CLAW_ERROR;
     }
 
     /* Build API base URL: <api_url>/bot<token> */
@@ -516,27 +519,24 @@ int telegram_init(void)
 
 int telegram_start(void)
 {
-    if (s_bot_token[0] == '\0') {
-        return CLAW_OK;
-    }
 
-    claw_thread_t w = claw_thread_create("tg_ai", tg_ai_worker,
-                                          NULL, WORKER_STACK, 10);
-    if (!w) {
+    s_ai_thread = claw_thread_create("tg_ai", tg_ai_worker,
+                                      NULL, WORKER_STACK, 10);
+    if (!s_ai_thread) {
         CLAW_LOGE(TAG, "failed to create AI worker");
         return CLAW_ERROR;
     }
 
-    claw_thread_t o = claw_thread_create("tg_out", tg_outbound_thread,
-                                          NULL, OUTBOUND_STACK, 10);
-    if (!o) {
+    s_out_thread = claw_thread_create("tg_out", tg_outbound_thread,
+                                       NULL, OUTBOUND_STACK, 10);
+    if (!s_out_thread) {
         CLAW_LOGE(TAG, "failed to create outbound thread");
         return CLAW_ERROR;
     }
 
-    claw_thread_t p = claw_thread_create("tg_poll", tg_poll_thread,
-                                          NULL, POLL_STACK, 10);
-    if (!p) {
+    s_poll_thread = claw_thread_create("tg_poll", tg_poll_thread,
+                                        NULL, POLL_STACK, 10);
+    if (!s_poll_thread) {
         CLAW_LOGE(TAG, "failed to create poll thread");
         return CLAW_ERROR;
     }
@@ -545,10 +545,34 @@ int telegram_start(void)
     return CLAW_OK;
 }
 
+void telegram_stop(void)
+{
+    claw_thread_delete(s_poll_thread);
+    s_poll_thread = NULL;
+
+    claw_thread_delete(s_ai_thread);
+    s_ai_thread = NULL;
+
+    claw_thread_delete(s_out_thread);
+    s_out_thread = NULL;
+
+    if (s_inbound_q) {
+        claw_mq_delete(s_inbound_q);
+        s_inbound_q = NULL;
+    }
+    if (s_outbound_q) {
+        claw_mq_delete(s_outbound_q);
+        s_outbound_q = NULL;
+    }
+
+    CLAW_LOGI(TAG, "stopped");
+}
+
 #else /* !CONFIG_RTCLAW_TELEGRAM_ENABLE */
 
 int  telegram_init(void)  { return 0; }
 int  telegram_start(void) { return 0; }
+void telegram_stop(void)  {}
 void telegram_set_bot_token(const char *t) { (void)t; }
 const char *telegram_get_bot_token(void)   { return ""; }
 

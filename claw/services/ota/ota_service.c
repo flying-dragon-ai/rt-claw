@@ -220,6 +220,11 @@ static void ota_worker_thread(void *arg)
 
 int ota_trigger_update(const char *url)
 {
+    if (!claw_ota_supported()) {
+        CLAW_LOGW(TAG, "OTA not supported on this platform");
+        return CLAW_ERROR;
+    }
+
     if (s_state == CLAW_OTA_DOWNLOADING) {
         CLAW_LOGW(TAG, "OTA already in progress");
         return CLAW_ERROR;
@@ -253,7 +258,7 @@ static void ota_check_thread(void *arg)
     /* Wait for network to stabilize after boot */
     claw_thread_delay_ms(30000);
 
-    while (1) {
+    while (!claw_thread_should_exit()) {
         if (s_state == CLAW_OTA_IDLE) {
             claw_ota_info_t info;
             int ret = ota_check_update(&info);

@@ -26,6 +26,7 @@ typedef struct {
 
 static sched_task_t s_tasks[CLAW_SCHED_MAX_TASKS];
 static claw_mutex_t s_lock;
+static claw_thread_t s_thread;
 
 static void sched_thread(void *arg)
 {
@@ -78,10 +79,10 @@ int sched_init(void)
 
     memset(s_tasks, 0, sizeof(s_tasks));
 
-    claw_thread_t th = claw_thread_create("sched", sched_thread, NULL,
-                                           CLAW_SCHED_THREAD_STACK,
-                                           CLAW_SCHED_THREAD_PRIO);
-    if (!th) {
+    s_thread = claw_thread_create("sched", sched_thread, NULL,
+                                    CLAW_SCHED_THREAD_STACK,
+                                    CLAW_SCHED_THREAD_PRIO);
+    if (!s_thread) {
         CLAW_LOGE(TAG, "thread create failed");
         claw_mutex_delete(s_lock);
         s_lock = NULL;
@@ -91,6 +92,19 @@ int sched_init(void)
     CLAW_LOGI(TAG, "started, max_tasks=%d, tick=%dms",
               CLAW_SCHED_MAX_TASKS, CLAW_SCHED_TICK_MS);
     return CLAW_OK;
+}
+
+void sched_stop(void)
+{
+    claw_thread_delete(s_thread);
+    s_thread = NULL;
+
+    if (s_lock) {
+        claw_mutex_delete(s_lock);
+        s_lock = NULL;
+    }
+
+    CLAW_LOGI(TAG, "stopped");
 }
 
 int sched_add(const char *name, uint32_t interval_ms, int32_t count,

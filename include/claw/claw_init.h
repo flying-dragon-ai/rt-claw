@@ -9,5 +9,6 @@
 #define CLAW_INIT_H
 
 int claw_init(void);
+void claw_deinit(void);
 
 #endif /* CLAW_INIT_H */

@@ -74,6 +74,9 @@ static esp_websocket_client_handle_t s_ws_client;
 static CURL *s_ws_curl;
 #endif
 static volatile int s_ws_connected;
+static claw_thread_t s_ai_thread;
+static claw_thread_t s_out_thread;
+static claw_thread_t s_main_thread;
 
 /* Event dedup ring buffer — drop events already processed */
 #define DEDUP_SLOTS  8
@@ -1244,6 +1247,11 @@ int feishu_init(void)
                  "%s", CONFIG_RTCLAW_FEISHU_APP_SECRET);
     }
 
+    if (s_app_id[0] == '\0' || s_app_secret[0] == '\0') {
+        CLAW_LOGE(TAG, "no credentials configured");
+        return CLAW_ERROR;
+    }
+
     s_lock = claw_mutex_create("feishu");
     if (!s_lock) {
         return CLAW_ERROR;
@@ -1274,35 +1282,78 @@ int feishu_init(void)
 int feishu_start(void)
 {
     /* AI worker: inbound queue → ai_chat → outbound queue */
-    claw_thread_t w = claw_thread_create("fs_ai", ai_worker_thread,
-                                          NULL, WORKER_STACK, 10);
-    if (!w) {
+    s_ai_thread = claw_thread_create("fs_ai", ai_worker_thread,
+                                      NULL, WORKER_STACK, 10);
+    if (!s_ai_thread) {
         CLAW_LOGE(TAG, "failed to create AI worker");
         return CLAW_ERROR;
     }
 
     /* Outbound dispatch: outbound queue → send_reply (HTTP) */
-    claw_thread_t o = claw_thread_create("fs_out", outbound_thread,
-                                          NULL, OUTBOUND_STACK, 10);
-    if (!o) {
+    s_out_thread = claw_thread_create("fs_out", outbound_thread,
+                                       NULL, OUTBOUND_STACK, 10);
+    if (!s_out_thread) {
         CLAW_LOGE(TAG, "failed to create outbound thread");
         return CLAW_ERROR;
     }
 
     /* Feishu WebSocket connection thread */
-    claw_thread_t t = claw_thread_create("feishu", feishu_thread, NULL,
-                                         8192, 10);
-    if (!t) {
+    s_main_thread = claw_thread_create("feishu", feishu_thread,
+                                        NULL, 8192, 10);
+    if (!s_main_thread) {
         CLAW_LOGE(TAG, "failed to create thread");
         return CLAW_ERROR;
     }
     return CLAW_OK;
 }
 
+void feishu_stop(void)
+{
+    /* Close WebSocket to unblock recv loops */
+#ifdef CLAW_PLATFORM_ESP_IDF
+    if (s_ws_client) {
+        esp_websocket_client_stop(s_ws_client);
+        esp_websocket_client_destroy(s_ws_client);
+        s_ws_client = NULL;
+    }
+#elif defined(CLAW_PLATFORM_LINUX)
+    if (s_ws_curl) {
+        curl_easy_cleanup(s_ws_curl);
+        s_ws_curl = NULL;
+    }
+#endif
+    s_ws_connected = 0;
+
+    claw_thread_delete(s_main_thread);
+    s_main_thread = NULL;
+
+    claw_thread_delete(s_ai_thread);
+    s_ai_thread = NULL;
+
+    claw_thread_delete(s_out_thread);
+    s_out_thread = NULL;
+
+    if (s_inbound_q) {
+        claw_mq_delete(s_inbound_q);
+        s_inbound_q = NULL;
+    }
+    if (s_outbound_q) {
+        claw_mq_delete(s_outbound_q);
+        s_outbound_q = NULL;
+    }
+    if (s_lock) {
+        claw_mutex_delete(s_lock);
+        s_lock = NULL;
+    }
+
+    CLAW_LOGI(TAG, "stopped");
+}
+
 #else /* !CONFIG_RTCLAW_FEISHU_ENABLE */
 
 int  feishu_init(void)  { return 0; }
 int  feishu_start(void) { return 0; }
+void feishu_stop(void)  {}
 void feishu_set_app_id(const char *id)     { (void)id; }
 void feishu_set_app_secret(const char *s)  { (void)s; }
 const char *feishu_get_app_id(void)        { return ""; }

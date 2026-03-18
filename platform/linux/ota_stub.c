@@ -40,3 +40,8 @@ const char *claw_ota_running_version(void)
 {
     return RT_CLAW_VERSION;
 }
+
+int claw_ota_supported(void)
+{
+    return 0;
+}

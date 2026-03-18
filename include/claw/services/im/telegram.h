@@ -9,8 +9,9 @@
 #ifndef CLAW_SERVICES_IM_TELEGRAM_H
 #define CLAW_SERVICES_IM_TELEGRAM_H
 
-int telegram_init(void);
-int telegram_start(void);
+int  telegram_init(void);
+int  telegram_start(void);
+void telegram_stop(void);
 
 /**
  * Runtime configuration — set Bot token before telegram_init().

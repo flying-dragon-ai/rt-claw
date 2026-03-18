@@ -77,6 +77,9 @@ int claw_ota_mark_valid(void);
 /* Return the version string of the running firmware. */
 const char *claw_ota_running_version(void);
 
+/* Return 1 if platform supports OTA, 0 otherwise. */
+int claw_ota_supported(void);
+
 #ifdef __cplusplus
 }
 #endif

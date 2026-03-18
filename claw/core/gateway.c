@@ -117,6 +117,7 @@ static void dispatch_msg(struct gateway_msg *msg)
 /* --- Gateway thread --- */
 
 static claw_mq_t gw_mq;
+static claw_thread_t s_gw_thread;
 
 static void gateway_thread_entry(void *param)
 {
@@ -148,12 +149,12 @@ int gateway_init(void)
         return CLAW_ERROR;
     }
 
-    claw_thread_t t = claw_thread_create("gateway",
-                                          gateway_thread_entry,
-                                          NULL,
-                                          CLAW_GW_THREAD_STACK,
-                                          CLAW_GW_THREAD_PRIO);
-    if (!t) {
+    s_gw_thread = claw_thread_create("gateway",
+                                       gateway_thread_entry,
+                                       NULL,
+                                       CLAW_GW_THREAD_STACK,
+                                       CLAW_GW_THREAD_PRIO);
+    if (!s_gw_thread) {
         CLAW_LOGE(TAG, "thread create failed");
         claw_mq_delete(gw_mq);
         gw_mq = NULL;
@@ -173,5 +174,17 @@ void gateway_get_stats(struct gateway_stats *out)
 {
     if (out) {
         memcpy(out, &s_stats, sizeof(s_stats));
+    }
+}
+
+void gateway_stop(void)
+{
+    if (s_gw_thread) {
+        claw_thread_delete(s_gw_thread);
+        s_gw_thread = NULL;
+    }
+    if (gw_mq) {
+        claw_mq_delete(gw_mq);
+        gw_mq = NULL;
     }
 }

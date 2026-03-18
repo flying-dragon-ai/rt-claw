@@ -209,4 +209,9 @@ const char *claw_ota_running_version(void)
     return desc ? desc->version : "unknown";
 }
 
+int claw_ota_supported(void)
+{
+    return 1;
+}
+
 #endif /* CONFIG_RTCLAW_OTA_ENABLE */

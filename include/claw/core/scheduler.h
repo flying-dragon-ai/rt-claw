@@ -14,6 +14,7 @@
 typedef void (*sched_callback_t)(void *arg);
 
 int  sched_init(void);
+void sched_stop(void);
 int  sched_add(const char *name, uint32_t interval_ms, int32_t count,
                sched_callback_t cb, void *arg);
 int  sched_remove(const char *name);

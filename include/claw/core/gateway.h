@@ -61,6 +61,7 @@ struct gateway_stats {
 };
 
 int gateway_init(void);
+void gateway_stop(void);
 int gateway_send(struct gateway_msg *msg);
 void gateway_get_stats(struct gateway_stats *out);
 
