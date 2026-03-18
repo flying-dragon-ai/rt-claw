@@ -144,6 +144,8 @@ platform_src = files(
     'startup.S',
     'FreeRTOS_asm_vectors.S',
     'main.c',
+    'shell.c',
+    'drivers/console.c',
     'syscalls.c',
     'boards/qemu/board.c',
 )

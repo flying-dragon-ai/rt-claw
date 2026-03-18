@@ -162,6 +162,13 @@ const char *pcApplicationHostnameHook(void)
     return "rt-claw";
 }
 
+/* Scheduler tool stub — tool_sched.c is ESP-IDF only (uses NVS) */
+int sched_tool_remove_by_name(const char *name)
+{
+    (void)name;
+    return -1;
+}
+
 /* ARM exception handler stubs */
 void FIQInterrupt(void) { while (1); }
 

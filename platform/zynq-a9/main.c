@@ -92,17 +92,22 @@ int main(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Main task — runs claw_init then idles                              */
+/* Main task — runs claw_init then starts shell                       */
 /* ------------------------------------------------------------------ */
+extern void zynq_shell_loop(void);
+
 static void claw_main_task(void *pvParameters)
 {
     (void)pvParameters;
 
     claw_init();
 
-    for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    /* Wait for DHCP before starting shell */
+    printf("[init] waiting for network (10s)...\n");
+    vTaskDelay(pdMS_TO_TICKS(10000));
+
+    /* Enter interactive shell (does not return) */
+    zynq_shell_loop();
 }
 
 /* ------------------------------------------------------------------ */
