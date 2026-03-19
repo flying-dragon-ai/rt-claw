@@ -74,7 +74,19 @@ static void dispatch_msg(struct gateway_msg *msg)
         s_stats.per_type[msg->type]++;
     }
 
-    /* Pipeline: run handlers in registration order */
+    /* Polymorphic dispatch: if message has ops, use them */
+    if (msg->ops && msg->ops->dispatch) {
+        int rc = msg->ops->dispatch(msg);
+        if (rc > 0) {
+            s_stats.filtered++;
+        }
+        if (msg->ops && msg->ops->destroy) {
+            msg->ops->destroy(msg);
+        }
+        return;
+    }
+
+    /* Legacy pipeline: run handlers in registration order */
     for (int i = 0; i < s_handler_count; i++) {
         int rc = s_handlers[i].process(msg);
         if (rc > 0) {

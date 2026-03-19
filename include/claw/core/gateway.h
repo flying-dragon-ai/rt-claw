@@ -20,7 +20,21 @@ enum gateway_msg_type {
     GW_MSG_TYPE_MAX,
 };
 
+/*
+ * Message ops vtable — enables polymorphic dispatch.
+ * All fields are optional (NULL = use default behavior).
+ */
+struct gateway_msg;
+
+struct gateway_msg_ops {
+    int  (*dispatch)(struct gateway_msg *msg);
+    void (*destroy)(struct gateway_msg *msg);
+    int  (*serialize)(const struct gateway_msg *msg, char *buf, size_t len);
+    void (*dump)(const struct gateway_msg *msg);
+};
+
 struct gateway_msg {
+    const struct gateway_msg_ops *ops;  /* NULL = legacy dispatch */
     enum gateway_msg_type type;
     uint16_t len;
     uint8_t  payload[CLAW_GW_MSG_MAX_LEN];
