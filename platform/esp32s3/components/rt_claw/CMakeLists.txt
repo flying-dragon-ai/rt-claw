@@ -27,15 +27,15 @@ set(CLAW_REQUIRES
 # These components always exist; unused ones add only include paths.
 list(APPEND CLAW_REQUIRES esp_eth esp_wifi esp_lcd app_update)
 
+# Stub source so the component produces a real static library
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/rt_claw_stub.c" "/* auto-generated */\n")
+set(CLAW_SRCS "${CMAKE_CURRENT_BINARY_DIR}/rt_claw_stub.c")
+
 # USB HID mouse — requires esp_tinyusb managed component
 if(CONFIG_RTCLAW_USB_HID_MOUSE)
     list(APPEND CLAW_SRCS
         "${RT_CLAW_ROOT}/drivers/input/espressif/usb_hid_mouse.c")
 endif()
-
-# Stub source so the component produces a real static library
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/rt_claw_stub.c" "/* auto-generated */\n")
-set(CLAW_SRCS "${CMAKE_CURRENT_BINARY_DIR}/rt_claw_stub.c")
 
 # Platform OTA implementation — must live in rt_claw (not main) so the
 # linker resolves symbols referenced by Meson-compiled ota_service.o.

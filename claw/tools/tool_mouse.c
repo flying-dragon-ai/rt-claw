@@ -8,6 +8,7 @@
 #include "claw/tools/claw_tools.h"
 #include "claw/services/swarm/swarm.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #define TAG "tool_mouse"
@@ -28,7 +29,7 @@ static claw_err_t tool_mouse_move(struct claw_tool *tool,
     if (!dx_j || !cJSON_IsNumber(dx_j) ||
         !dy_j || !cJSON_IsNumber(dy_j)) {
         cJSON_AddStringToObject(result, "error", "missing dx or dy");
-        return CLAW_ERROR;
+        return CLAW_ERR_GENERIC;
     }
 
     int dx = dx_j->valueint;
@@ -37,7 +38,7 @@ static claw_err_t tool_mouse_move(struct claw_tool *tool,
     if (dx < -127 || dx > 127 || dy < -127 || dy > 127) {
         cJSON_AddStringToObject(result, "error",
                                 "dx/dy must be in range [-127, 127]");
-        return CLAW_ERROR;
+        return CLAW_ERR_GENERIC;
     }
 
     claw_err_t err = usb_hid_mouse_move((int8_t)dx, (int8_t)dy);
@@ -76,7 +77,7 @@ static claw_err_t tool_mouse_click(struct claw_tool *tool,
         } else {
             cJSON_AddStringToObject(result, "error",
                                     "button must be left/right/middle");
-            return CLAW_ERROR;
+            return CLAW_ERR_GENERIC;
         }
     }
 
@@ -105,14 +106,14 @@ static claw_err_t tool_mouse_scroll(struct claw_tool *tool,
 
     if (!delta_j || !cJSON_IsNumber(delta_j)) {
         cJSON_AddStringToObject(result, "error", "missing delta");
-        return CLAW_ERROR;
+        return CLAW_ERR_GENERIC;
     }
 
     int delta = delta_j->valueint;
     if (delta < -127 || delta > 127) {
         cJSON_AddStringToObject(result, "error",
                                 "delta must be in range [-127, 127]");
-        return CLAW_ERROR;
+        return CLAW_ERR_GENERIC;
     }
 
     claw_err_t err = usb_hid_mouse_scroll((int8_t)delta);

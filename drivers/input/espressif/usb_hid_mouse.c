@@ -134,7 +134,7 @@ claw_err_t usb_hid_mouse_init(void)
     esp_err_t ret = tinyusb_driver_install(&tusb_cfg);
     if (ret != ESP_OK) {
         CLAW_LOGE(TAG, "TinyUSB install failed: %d", ret);
-        return CLAW_ERROR;
+        return CLAW_ERR_GENERIC;
     }
 
     CLAW_LOGI(TAG, "USB HID mouse ready (waiting for host)");
@@ -145,7 +145,7 @@ claw_err_t usb_hid_mouse_move(int8_t dx, int8_t dy)
 {
     if (!hid_wait_ready(100)) {
         CLAW_LOGW(TAG, "HID not ready, move ignored");
-        return CLAW_ERROR;
+        return CLAW_ERR_GENERIC;
     }
 
     tud_hid_mouse_report(REPORT_ID_MOUSE, 0x00, dx, dy, 0, 0);
@@ -156,7 +156,7 @@ claw_err_t usb_hid_mouse_click(uint8_t buttons)
 {
     if (!hid_wait_ready(100)) {
         CLAW_LOGW(TAG, "HID not ready, click ignored");
-        return CLAW_ERROR;
+        return CLAW_ERR_GENERIC;
     }
 
     /* Press */
@@ -164,7 +164,7 @@ claw_err_t usb_hid_mouse_click(uint8_t buttons)
 
     /* Wait for report to send, then release */
     if (!hid_wait_ready(50)) {
-        return CLAW_ERROR;
+        return CLAW_ERR_GENERIC;
     }
     claw_delay_ms(50);
     tud_hid_mouse_report(REPORT_ID_MOUSE, 0x00, 0, 0, 0, 0);
@@ -176,7 +176,7 @@ claw_err_t usb_hid_mouse_scroll(int8_t delta)
 {
     if (!hid_wait_ready(100)) {
         CLAW_LOGW(TAG, "HID not ready, scroll ignored");
-        return CLAW_ERROR;
+        return CLAW_ERR_GENERIC;
     }
 
     tud_hid_mouse_report(REPORT_ID_MOUSE, 0x00, 0, 0, delta, 0);
@@ -217,26 +217,26 @@ CLAW_DRIVER_REGISTER(usb_hid_mouse, &usb_hid_mouse_drv);
 
 claw_err_t usb_hid_mouse_init(void)
 {
-    return CLAW_ERR_NOT_SUPPORTED;
+    return CLAW_ERR_INVALID;
 }
 
 claw_err_t usb_hid_mouse_move(int8_t dx, int8_t dy)
 {
     (void)dx;
     (void)dy;
-    return CLAW_ERR_NOT_SUPPORTED;
+    return CLAW_ERR_INVALID;
 }
 
 claw_err_t usb_hid_mouse_click(uint8_t buttons)
 {
     (void)buttons;
-    return CLAW_ERR_NOT_SUPPORTED;
+    return CLAW_ERR_INVALID;
 }
 
 claw_err_t usb_hid_mouse_scroll(int8_t delta)
 {
     (void)delta;
-    return CLAW_ERR_NOT_SUPPORTED;
+    return CLAW_ERR_INVALID;
 }
 
 int usb_hid_mouse_is_ready(void)
