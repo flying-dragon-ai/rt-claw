@@ -93,6 +93,16 @@ menu "rt-claw Configuration"
                 Over-the-air firmware update via HTTP(S).
                 Requires OTA partition table (ota_0 + ota_1).
 
+        config RTCLAW_USB_HID_MOUSE
+            bool "Enable USB HID mouse"
+            default n
+            depends on IDF_TARGET_ESP32S3
+            help
+                Emulate a USB mouse via ESP32-S3 USB OTG (GPIO 19/20).
+                Uses TinyUSB HID device class.
+                Note: enabling this makes the USB OTG port a HID
+                device — USB Serial/JTAG console must use UART instead.
+
         menu "Tool Use"
 
             config RTCLAW_TOOL_GPIO
@@ -126,6 +136,13 @@ menu "rt-claw Configuration"
                 default y
                 help
                     http_request tool for GET/POST requests.
+
+            config RTCLAW_TOOL_MOUSE
+                bool "USB HID mouse tools"
+                default y
+                depends on RTCLAW_USB_HID_MOUSE
+                help
+                    mouse_move, mouse_click, mouse_scroll tools.
 
         endmenu
 
