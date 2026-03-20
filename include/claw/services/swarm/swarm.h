@@ -61,6 +61,7 @@ struct __attribute__((packed)) swarm_heartbeat {
 #define SWARM_CAP_SPEAKER   (1 << 4)  /* audio output */
 #define SWARM_CAP_AI        (1 << 5)  /* AI engine available */
 #define SWARM_CAP_INTERNET  (1 << 6)  /* external network */
+#define SWARM_CAP_MOUSE     (1 << 7)  /* USB HID mouse */
 
 /* --- Remote tool invocation (RPC) --- */
 

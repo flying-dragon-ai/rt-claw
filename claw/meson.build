@@ -22,6 +22,7 @@ src_files = files(
     'tools/tool_system.c',
     'tools/tool_net.c',
     'tools/tool_audio.c',
+    'tools/tool_mouse.c',
 )
 
 # Drivers (outside claw/ directory)
@@ -54,6 +55,9 @@ if get_option('tool_sched')
 endif
 if get_option('tool_net')
     feature_defs += '-DCONFIG_RTCLAW_TOOL_NET'
+endif
+if get_option('tool_mouse')
+    feature_defs += '-DCONFIG_RTCLAW_TOOL_MOUSE'
 endif
 if get_option('heartbeat')
     if not get_option('sched')
