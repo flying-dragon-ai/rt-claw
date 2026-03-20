@@ -14,6 +14,7 @@
 #include "osal/claw_os.h"
 #include "claw/services/ai/ai_engine.h"
 #include "claw/shell/shell_commands.h"
+#include "claw/shell/shell_history.h"
 #include "claw_board.h"
 #include "drivers/serial/espressif/console.h"
 
@@ -50,6 +51,30 @@ static void redraw_from(const char *buf, int len, int cursor)
     }
 }
 
+static void line_replace(char *buf, int *len, int *cursor,
+                         const char *text)
+{
+    while (*cursor > 0) {
+        claw_console_write("\b", 1);
+        (*cursor)--;
+    }
+    for (int i = 0; i < *len; i++) {
+        claw_console_write(" ", 1);
+    }
+    for (int i = 0; i < *len; i++) {
+        claw_console_write("\b", 1);
+    }
+    int nlen = (int)strlen(text);
+    if (nlen >= INPUT_SIZE) {
+        nlen = INPUT_SIZE - 1;
+    }
+    memcpy(buf, text, nlen);
+    buf[nlen] = '\0';
+    *len = nlen;
+    *cursor = nlen;
+    claw_console_write(buf, nlen);
+}
+
 /* Forward declaration */
 static void find_completions(const char *prefix, int prefix_len,
                              const char **match, int *match_count);
@@ -77,6 +102,13 @@ static int shell_read_line(char *buf, int size)
             uint8_t trail;
             claw_console_read(&trail, 1, 20);
             break;
+        }
+
+        /* Ctrl-C — cancel current line */
+        if (ch == 3) {
+            claw_console_write("^C\r\n", 4);
+            buf[0] = '\0';
+            return 0;
         }
 
         /* Tab completion */
@@ -192,6 +224,22 @@ static int shell_read_line(char *buf, int size)
             }
 
             switch (seq[1]) {
+            case 'A': { /* Up arrow — older history */
+                buf[len] = '\0';
+                const char *h = shell_history_navigate(-1, buf);
+                if (h) {
+                    line_replace(buf, &len, &cursor, h);
+                }
+                break;
+            }
+            case 'B': { /* Down arrow — newer history */
+                buf[len] = '\0';
+                const char *h = shell_history_navigate(1, buf);
+                if (h) {
+                    line_replace(buf, &len, &cursor, h);
+                }
+                break;
+            }
             case 'D': /* Left arrow — UTF-8 aware */
                 if (cursor > 0) {
                     int skip = 1;
@@ -448,6 +496,7 @@ static void dispatch_command(char *line)
 
 static volatile int s_anim_active;
 static volatile int s_anim_phase;
+static volatile int s_chat_cancel;
 
 static void anim_thread_fn(void *arg)
 {
@@ -456,13 +505,23 @@ static void anim_thread_fn(void *arg)
     const char *dot_str[] = { ".", "..", "..." };
 
     while (s_anim_active) {
+        uint8_t key;
+        if (claw_console_read(&key, 1, 50) > 0 && key == 3) {
+            s_chat_cancel = 1;
+            s_anim_active = 0;
+            printf("\r  ^C — cancelled"
+                   "                    \n");
+            fflush(stdout);
+            break;
+        }
+
         if (s_anim_phase == 0) {
             printf("\r  " CLR_MAGENTA "thinking %s"
                    CLR_RESET "   ", dot_str[dots]);
             fflush(stdout);
             dots = (dots + 1) % 3;
         }
-        claw_thread_delay_ms(500);
+        claw_thread_delay_ms(450);
     }
 }
 
@@ -485,6 +544,7 @@ static void do_chat(const char *msg)
 {
     s_anim_active = 1;
     s_anim_phase = 0;
+    s_chat_cancel = 0;
     ai_set_status_cb(chat_status_cb);
 
     struct claw_thread *anim = claw_thread_create("anim",
@@ -497,6 +557,10 @@ static void do_chat(const char *msg)
     claw_thread_delay_ms(300);
     claw_thread_delete(anim);
     printf("\r                              \r");
+
+    if (s_chat_cancel) {
+        return;
+    }
 
     if (ret == CLAW_OK) {
         printf(CLR_GREEN "rt-claw> " CLR_RESET "%s\n", s_reply);
@@ -526,6 +590,7 @@ void zynq_shell_loop(void)
     printf("\n");
 
     while (1) {
+        shell_history_reset_nav();
         printf("\n" CLR_CYAN "you> " CLR_RESET);
         fflush(stdout);
         int len = shell_read_line(input, sizeof(input));
@@ -533,6 +598,8 @@ void zynq_shell_loop(void)
         if (len == 0) {
             continue;
         }
+
+        shell_history_add(input);
 
         if (input[0] == '/') {
             dispatch_command(input);
