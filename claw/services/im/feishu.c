@@ -23,6 +23,7 @@
 #include "claw/services/ai/ai_engine.h"
 #include "claw/services/ai/ai_skill.h"
 #include "claw/shell/shell_cmd.h"
+#include "claw/shell/shell_commands.h"
 #include "claw/tools/claw_tools.h"
 #include "claw/core/claw_service.h"
 #include "utils/list.h"
@@ -751,8 +752,7 @@ static void ai_worker_thread(void *arg)
             continue;
         }
 
-        /* Intercept /commands — try skill dispatch first */
-#ifdef CONFIG_RTCLAW_SKILL_ENABLE
+        /* Intercept /commands — try skill, then shell command */
         if (in.text[0] == '/') {
             char line_copy[MSG_TEXT_MAX];
             snprintf(line_copy, sizeof(line_copy), "%s", in.text);
@@ -760,19 +760,39 @@ static void ai_worker_thread(void *arg)
             int argc = shell_tokenize(line_copy, argv, 8);
             if (argc > 0) {
                 char *cmd_reply = claw_malloc(REPLY_BUF_SIZE);
-                if (cmd_reply &&
-                    ai_skill_try_command(argv[0], argc, argv,
+                if (!cmd_reply) {
+                    goto skip_cmd;
+                }
+#ifdef CONFIG_RTCLAW_SKILL_ENABLE
+                if (ai_skill_try_command(argv[0], argc, argv,
                                          cmd_reply,
                                          REPLY_BUF_SIZE) == CLAW_OK) {
-                    enqueue_reply(ctx, in.chat_id, in.msg_id, cmd_reply);
+                    enqueue_reply(ctx, in.chat_id, in.msg_id,
+                                  cmd_reply);
+                    claw_free(cmd_reply);
+                    continue;
+                }
+#endif
+                /* Try shell command with output capture */
+                if (shell_exec_capture(argv[0], argc, argv,
+                                       cmd_reply,
+                                       REPLY_BUF_SIZE) == CLAW_OK) {
+                    if (cmd_reply[0] != '\0') {
+                        enqueue_reply(ctx, in.chat_id, in.msg_id,
+                                      cmd_reply);
+                    } else {
+                        enqueue_reply(ctx, in.chat_id, in.msg_id,
+                                      "(command executed, no output)");
+                    }
                     claw_free(cmd_reply);
                     continue;
                 }
                 claw_free(cmd_reply);
             }
-            /* Not a skill — fall through to ai_chat() */
+skip_cmd:
+            /* Not a skill or shell command — fall through to AI */
+            ;
         }
-#endif
 
         /* Immediate typing indicator — before AI call */
         if (in.msg_id[0] != '\0') {

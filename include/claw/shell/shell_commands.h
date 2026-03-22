@@ -27,6 +27,15 @@ void shell_nvs_config_load(void);
  */
 void shell_nvs_save_str(const char *ns, const char *key, const char *val);
 
+/**
+ * Execute a shell command by name and capture printf output into buf.
+ * Searches shell_common_commands table.
+ * Returns CLAW_OK if command found and executed, CLAW_ERR_NOENT otherwise.
+ * buf will contain the captured stdout output (NUL-terminated).
+ */
+int shell_exec_capture(const char *cmd_name, int argc, char **argv,
+                       char *buf, size_t buf_size);
+
 /* NVS namespace constants */
 #define SHELL_NVS_NS_AI       "ai_config"
 #define SHELL_NVS_NS_FEISHU   "feishu_cfg"

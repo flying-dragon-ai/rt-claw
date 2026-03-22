@@ -6,6 +6,7 @@
  */
 
 #include "osal/claw_os.h"
+#include "claw/core/claw_errno.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -477,3 +478,83 @@ int shell_common_command_count(void)
 {
     return SHELL_CMD_COUNT(shell_common_commands);
 }
+
+/* ---- Capture shell command output for IM dispatch ---- */
+
+#if defined(CLAW_PLATFORM_ESP_IDF) || defined(CLAW_PLATFORM_LINUX)
+#include <unistd.h>
+#include <fcntl.h>
+
+int shell_exec_capture(const char *cmd_name, int argc, char **argv,
+                       char *buf, size_t buf_size)
+{
+    if (!cmd_name || !buf || buf_size == 0) {
+        return CLAW_ERR_INVALID;
+    }
+    buf[0] = '\0';
+
+    /* Find command in common table */
+    const shell_cmd_t *cmd = NULL;
+    int count = SHELL_CMD_COUNT(shell_common_commands);
+    for (int i = 0; i < count; i++) {
+        if (strcmp(shell_common_commands[i].name, cmd_name) == 0) {
+            cmd = &shell_common_commands[i];
+            break;
+        }
+    }
+    if (!cmd) {
+        return CLAW_ERR_NOENT;
+    }
+
+    /* Create pipe and redirect stdout */
+    int pipefd[2];
+    if (pipe(pipefd) < 0) {
+        return CLAW_ERR_GENERIC;
+    }
+
+    /* Set read end non-blocking for safety */
+    int flags = fcntl(pipefd[0], F_GETFL, 0);
+    fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
+
+    fflush(stdout);
+    int saved_stdout = dup(STDOUT_FILENO);
+    dup2(pipefd[1], STDOUT_FILENO);
+
+    /* Execute command */
+    cmd->handler(argc, argv);
+
+    /* Restore stdout */
+    fflush(stdout);
+    dup2(saved_stdout, STDOUT_FILENO);
+    close(saved_stdout);
+    close(pipefd[1]);
+
+    /* Read captured output */
+    size_t total = 0;
+    while (total < buf_size - 1) {
+        int n = read(pipefd[0], buf + total, buf_size - 1 - total);
+        if (n <= 0) {
+            break;
+        }
+        total += (size_t)n;
+    }
+    buf[total] = '\0';
+    close(pipefd[0]);
+
+    return CLAW_OK;
+}
+
+#else /* bare-metal: no pipe/dup2, stub only */
+
+int shell_exec_capture(const char *cmd_name, int argc, char **argv,
+                       char *buf, size_t buf_size)
+{
+    (void)cmd_name;
+    (void)argc;
+    (void)argv;
+    (void)buf;
+    (void)buf_size;
+    return CLAW_ERR_NOENT;
+}
+
+#endif
