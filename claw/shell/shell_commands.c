@@ -482,6 +482,19 @@ int shell_common_command_count(void)
 /* ---- Capture shell command output for IM dispatch ---- */
 
 #if defined(CLAW_PLATFORM_ESP_IDF) || defined(CLAW_PLATFORM_LINUX)
+static const shell_cmd_t *find_common_cmd(const char *name)
+{
+    int count = SHELL_CMD_COUNT(shell_common_commands);
+    for (int i = 0; i < count; i++) {
+        if (strcmp(shell_common_commands[i].name, name) == 0) {
+            return &shell_common_commands[i];
+        }
+    }
+    return NULL;
+}
+#endif
+
+#if defined(CLAW_PLATFORM_LINUX)
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -493,26 +506,16 @@ int shell_exec_capture(const char *cmd_name, int argc, char **argv,
     }
     buf[0] = '\0';
 
-    /* Find command in common table */
-    const shell_cmd_t *cmd = NULL;
-    int count = SHELL_CMD_COUNT(shell_common_commands);
-    for (int i = 0; i < count; i++) {
-        if (strcmp(shell_common_commands[i].name, cmd_name) == 0) {
-            cmd = &shell_common_commands[i];
-            break;
-        }
-    }
+    const shell_cmd_t *cmd = find_common_cmd(cmd_name);
     if (!cmd) {
         return CLAW_ERR_NOENT;
     }
 
-    /* Create pipe and redirect stdout */
     int pipefd[2];
     if (pipe(pipefd) < 0) {
         return CLAW_ERR_GENERIC;
     }
 
-    /* Set read end non-blocking for safety */
     int flags = fcntl(pipefd[0], F_GETFL, 0);
     fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
 
@@ -520,16 +523,13 @@ int shell_exec_capture(const char *cmd_name, int argc, char **argv,
     int saved_stdout = dup(STDOUT_FILENO);
     dup2(pipefd[1], STDOUT_FILENO);
 
-    /* Execute command */
     cmd->handler(argc, argv);
 
-    /* Restore stdout */
     fflush(stdout);
     dup2(saved_stdout, STDOUT_FILENO);
     close(saved_stdout);
     close(pipefd[1]);
 
-    /* Read captured output */
     size_t total = 0;
     while (total < buf_size - 1) {
         int n = read(pipefd[0], buf + total, buf_size - 1 - total);
@@ -544,7 +544,39 @@ int shell_exec_capture(const char *cmd_name, int argc, char **argv,
     return CLAW_OK;
 }
 
-#else /* bare-metal: no pipe/dup2, stub only */
+#elif defined(CLAW_PLATFORM_ESP_IDF)
+
+/*
+ * ESP-IDF lacks pipe()/dup2(). Use a global capture buffer that
+ * snprintf-based commands can write to via shell_capture_printf().
+ * For existing printf()-based commands, we temporarily swap the
+ * stdout buffer using setvbuf().
+ */
+int shell_exec_capture(const char *cmd_name, int argc, char **argv,
+                       char *buf, size_t buf_size)
+{
+    if (!cmd_name || !buf || buf_size == 0) {
+        return CLAW_ERR_INVALID;
+    }
+    buf[0] = '\0';
+
+    const shell_cmd_t *cmd = find_common_cmd(cmd_name);
+    if (!cmd) {
+        return CLAW_ERR_NOENT;
+    }
+
+    fflush(stdout);
+    setvbuf(stdout, buf, _IOFBF, (int)buf_size);
+
+    cmd->handler(argc, argv);
+
+    fflush(stdout);
+    setvbuf(stdout, NULL, _IOLBF, 0);
+
+    return CLAW_OK;
+}
+
+#else /* bare-metal: stub */
 
 int shell_exec_capture(const char *cmd_name, int argc, char **argv,
                        char *buf, size_t buf_size)
