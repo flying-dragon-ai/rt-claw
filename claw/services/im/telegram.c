@@ -34,7 +34,6 @@
 
 #ifdef CONFIG_RTCLAW_TELEGRAM_ENABLE
 
-#include <inttypes.h>
 #include "osal/claw_net.h"
 #include "cJSON.h"
 
@@ -448,8 +447,8 @@ static void tg_poll_thread(void *arg)
     while (!claw_thread_should_exit()) {
         char body[128];
         snprintf(body, sizeof(body),
-                 "{\"offset\":%" PRId64 ",\"timeout\":%d}",
-                 ctx->update_offset, POLL_TIMEOUT_SEC);
+                 "{\"offset\":%lld,\"timeout\":%d}",
+                 (long long)ctx->update_offset, POLL_TIMEOUT_SEC);
 
         resp[0] = '\0';
         int ret = tg_api_post(ctx, "getUpdates", body, resp,
