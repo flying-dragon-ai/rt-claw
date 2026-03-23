@@ -236,15 +236,26 @@ _c3-build:
 			-B $(BUILD_DIR)/esp32c3-$(C3_BOARD)/idf \
 			-DRTCLAW_BOARD=$(C3_BOARD) set-target esp32c3; \
 	fi
-	@if [ ! -f $(BUILD_DIR)/esp32c3-$(C3_BOARD)/idf/compile_commands.json ]; then \
+	@CCJSON=$(BUILD_DIR)/esp32c3-$(C3_BOARD)/idf/compile_commands.json; \
+	DEFAULTS=$(ESP_C3_DIR)/boards/$(C3_BOARD)/sdkconfig.defaults; \
+	KCONFIG=$(ESP_C3_DIR)/components/rt_claw/Kconfig; \
+	SDKCONFIG=$(BUILD_DIR)/esp32c3-$(C3_BOARD)/idf/sdkconfig; \
+	if [ ! -f "$$CCJSON" ] || [ "$$DEFAULTS" -nt "$$CCJSON" ] \
+	   || [ "$$KCONFIG" -nt "$$CCJSON" ] \
+	   || { [ -f "$$SDKCONFIG" ] && [ "$$SDKCONFIG" -nt "$$CCJSON" ]; }; then \
 		cd $(ESP_C3_DIR) && idf.py \
 			-B $(BUILD_DIR)/esp32c3-$(C3_BOARD)/idf \
 			-DRTCLAW_BOARD=$(C3_BOARD) reconfigure; \
 	fi
 	python3 scripts/gen-esp32c3-cross.py $(C3_BOARD)
-	@if [ ! -f $(BUILD_DIR)/esp32c3-$(C3_BOARD)/meson/build.ninja ]; then \
+	@NINJA=$(BUILD_DIR)/esp32c3-$(C3_BOARD)/meson/build.ninja; \
+	CROSS=$(BUILD_DIR)/esp32c3-$(C3_BOARD)/cross.ini; \
+	if [ ! -f "$$NINJA" ]; then \
 		meson setup $(BUILD_DIR)/esp32c3-$(C3_BOARD)/meson \
-			--cross-file $(BUILD_DIR)/esp32c3-$(C3_BOARD)/cross.ini; \
+			--cross-file "$$CROSS"; \
+	elif [ "$$CROSS" -nt "$$NINJA" ]; then \
+		meson setup $(BUILD_DIR)/esp32c3-$(C3_BOARD)/meson \
+			--reconfigure --cross-file "$$CROSS"; \
 	fi
 	meson compile -C $(BUILD_DIR)/esp32c3-$(C3_BOARD)/meson
 	cd $(ESP_C3_DIR) && idf.py \
@@ -327,15 +338,26 @@ _s3-build:
 			-B $(BUILD_DIR)/esp32s3-$(S3_BOARD)/idf \
 			-DRTCLAW_BOARD=$(S3_BOARD) set-target esp32s3; \
 	fi
-	@if [ ! -f $(BUILD_DIR)/esp32s3-$(S3_BOARD)/idf/compile_commands.json ]; then \
+	@CCJSON=$(BUILD_DIR)/esp32s3-$(S3_BOARD)/idf/compile_commands.json; \
+	DEFAULTS=$(ESP_S3_DIR)/boards/$(S3_BOARD)/sdkconfig.defaults; \
+	KCONFIG=$(ESP_S3_DIR)/components/rt_claw/Kconfig; \
+	SDKCONFIG=$(BUILD_DIR)/esp32s3-$(S3_BOARD)/idf/sdkconfig; \
+	if [ ! -f "$$CCJSON" ] || [ "$$DEFAULTS" -nt "$$CCJSON" ] \
+	   || [ "$$KCONFIG" -nt "$$CCJSON" ] \
+	   || { [ -f "$$SDKCONFIG" ] && [ "$$SDKCONFIG" -nt "$$CCJSON" ]; }; then \
 		cd $(ESP_S3_DIR) && idf.py \
 			-B $(BUILD_DIR)/esp32s3-$(S3_BOARD)/idf \
 			-DRTCLAW_BOARD=$(S3_BOARD) reconfigure; \
 	fi
 	python3 scripts/gen-esp32s3-cross.py $(S3_BOARD)
-	@if [ ! -f $(BUILD_DIR)/esp32s3-$(S3_BOARD)/meson/build.ninja ]; then \
+	@NINJA=$(BUILD_DIR)/esp32s3-$(S3_BOARD)/meson/build.ninja; \
+	CROSS=$(BUILD_DIR)/esp32s3-$(S3_BOARD)/cross.ini; \
+	if [ ! -f "$$NINJA" ]; then \
 		meson setup $(BUILD_DIR)/esp32s3-$(S3_BOARD)/meson \
-			--cross-file $(BUILD_DIR)/esp32s3-$(S3_BOARD)/cross.ini; \
+			--cross-file "$$CROSS"; \
+	elif [ "$$CROSS" -nt "$$NINJA" ]; then \
+		meson setup $(BUILD_DIR)/esp32s3-$(S3_BOARD)/meson \
+			--reconfigure --cross-file "$$CROSS"; \
 	fi
 	meson compile -C $(BUILD_DIR)/esp32s3-$(S3_BOARD)/meson
 	cd $(ESP_S3_DIR) && idf.py \

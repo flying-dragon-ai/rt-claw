@@ -14,6 +14,7 @@
 #   python3 scripts/gen-esp32s3-cross.py              # QEMU
 #   python3 scripts/gen-esp32s3-cross.py default       # real hardware
 
+import io
 import json
 import os
 import re
@@ -105,43 +106,70 @@ def main():
         c_args.append(f'-isystem')
         c_args.append(inc)
 
-    """ Write cross.ini """
+    """ Write cross.ini (only update file if content changed) """
     os.makedirs(os.path.dirname(CROSS_INI), exist_ok=True)
-    with open(CROSS_INI, 'w') as f:
-        f.write('# Auto-generated Meson cross-file for ESP32-S3 (ESP-IDF)\n')
-        f.write(f'# Board: {BOARD}\n')
-        f.write('# Regenerate: python3 scripts/gen-esp32s3-cross.py\n')
-        f.write('# DO NOT edit manually or commit to git.\n\n')
+    buf = io.StringIO()
+    f = buf
 
-        f.write('[binaries]\n')
-        f.write(f"c = '{compiler}'\n")
-        f.write(f"ar = '{ar}'\n")
-        f.write(f"strip = '{strip_bin}'\n\n")
+    f.write('# Auto-generated Meson cross-file for ESP32-S3 (ESP-IDF)\n')
+    f.write(f'# Board: {BOARD}\n')
+    f.write('# Regenerate: python3 scripts/gen-esp32s3-cross.py\n')
+    f.write('# DO NOT edit manually or commit to git.\n\n')
 
-        f.write('[host_machine]\n')
-        f.write("system = 'none'\n")
-        f.write("cpu_family = 'xtensa'\n")
-        f.write("cpu = 'esp32s3'\n")
-        f.write("endian = 'little'\n\n")
+    f.write('[binaries]\n')
+    f.write(f"c = '{compiler}'\n")
+    f.write(f"ar = '{ar}'\n")
+    f.write(f"strip = '{strip_bin}'\n\n")
 
-        f.write('[built-in options]\n')
-        args_str = ', '.join(f"'{a}'" for a in c_args)
-        f.write(f'c_args = [{args_str}]\n')
-        f.write("b_staticpic = false\n")
-        f.write("b_pie = false\n\n")
+    f.write('[host_machine]\n')
+    f.write("system = 'none'\n")
+    f.write("cpu_family = 'xtensa'\n")
+    f.write("cpu = 'esp32s3'\n")
+    f.write("endian = 'little'\n\n")
 
-        f.write('[project options]\n')
-        f.write("osal = 'freertos'\n")
-        """
-        Feature flags disabled here — they come from sdkconfig.h
-        via the -include flag above.
-        """
-        f.write('swarm = false\n')
-        f.write('sched = false\n')
-        f.write('skill = false\n')
-        f.write('tool_gpio = false\n')
-        f.write('tool_system = false\n')
-        f.write('tool_sched = false\n')
+    f.write('[built-in options]\n')
+    args_str = ', '.join(f"'{a}'" for a in c_args)
+    f.write(f'c_args = [{args_str}]\n')
+    f.write("b_staticpic = false\n")
+    f.write("b_pie = false\n\n")
+
+    f.write('[project options]\n')
+    f.write("osal = 'freertos'\n")
+    # Sync Meson feature flags from sdkconfig.h
+    kconfig_to_meson = {
+        'CONFIG_RTCLAW_SWARM_ENABLE':     'swarm',
+        'CONFIG_RTCLAW_SCHED_ENABLE':     'sched',
+        'CONFIG_RTCLAW_SKILL_ENABLE':     'skill',
+        'CONFIG_RTCLAW_TOOL_GPIO':        'tool_gpio',
+        'CONFIG_RTCLAW_TOOL_SYSTEM':      'tool_system',
+        'CONFIG_RTCLAW_TOOL_SCHED':       'tool_sched',
+        'CONFIG_RTCLAW_TOOL_NET':         'tool_net',
+        'CONFIG_RTCLAW_TOOL_MOUSE':       'tool_mouse',
+        'CONFIG_RTCLAW_HEARTBEAT_ENABLE': 'heartbeat',
+        'CONFIG_RTCLAW_FEISHU_ENABLE':    'feishu',
+        'CONFIG_RTCLAW_TELEGRAM_ENABLE':  'telegram',
+        'CONFIG_RTCLAW_OTA_ENABLE':       'ota',
+    }
+    enabled = set()
+    if os.path.exists(SDKCONFIG_H):
+        with open(SDKCONFIG_H) as sh:
+            for line in sh:
+                for kconf in kconfig_to_meson:
+                    if f'#define {kconf} ' in line or \
+                       f'#define {kconf}\n' in line:
+                        enabled.add(kconf)
+    for kconf, mopt in kconfig_to_meson.items():
+        val = 'true' if kconf in enabled else 'false'
+        f.write(f'{mopt} = {val}\n')
+
+    new_content = buf.getvalue()
+    old_content = ''
+    if os.path.exists(CROSS_INI):
+        with open(CROSS_INI) as existing:
+            old_content = existing.read()
+    if new_content != old_content:
+        with open(CROSS_INI, 'w') as out:
+            out.write(new_content)
 
     print(f'Generated: {CROSS_INI}')
     print(f'  Board:     {BOARD}')
