@@ -42,9 +42,9 @@ ESP32-S3 WiFi 支持参考了 [MimiClaw](https://github.com/memovai/mimiclaw)。
 | OSAL | 一次编写，在 FreeRTOS、RT-Thread 和 Linux 上零修改运行 | 已完成 |
 | Gateway | 服务间线程安全的消息路由 | 已完成 |
 | 网络 | 以太网（QEMU）和 WiFi（真实硬件）；HTTP 客户端用于 API 调用 | 已完成 |
-| IM 集成 | 飞书（Lark）WebSocket 长连接；计划中：钉钉、QQ、Telegram | 进行中 |
+| IM 集成 | 飞书（Lark）WebSocket 长连接 + Telegram HTTP 长轮询；计划中：钉钉、QQ | 已完成 |
 | Web 刷写与串口 | 浏览器端固件刷写（esptool-js）+ 串口终端（ANSI 彩色渲染） | 已完成 |
-| 多模型 API | 支持主流 LLM API：Claude、GPT、Gemini、DeepSeek、GLM（智谱）、MiniMax、Grok、Moonshot（Kimi）、百川、通义千问、豆包、Llama（Ollama） | 计划中 |
+| 多模型 API | Claude 原生 API + OpenAI 兼容格式（GPT、DeepSeek、GLM/智谱、MiniMax、Grok、Moonshot/Kimi、百川、通义千问、豆包、Llama/Ollama）；按模型名自动识别 | 已完成 |
 | Web 配置页面 | 内置轻量 Web 页面，支持在线配置 API Key、选择模型、调整参数 | 计划中 |
 | Claw 技能提供者 | 作为其他 Claw 的技能插件，赋予其感知和控制物理世界的能力 | 计划中 |
 

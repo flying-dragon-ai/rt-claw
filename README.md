@@ -42,9 +42,9 @@ ESP32-S3 WiFi support adapted from [MimiClaw](https://github.com/memovai/mimicla
 | OSAL | Write once, run on FreeRTOS, RT-Thread and Linux with zero code changes | Done |
 | Gateway | Thread-safe message routing between services | Done |
 | Networking | Ethernet (QEMU) and WiFi (real hardware); HTTP client for API calls | Done |
-| IM Integrations | Feishu (Lark) via WebSocket long connection; planned: DingTalk, QQ, Telegram | In Progress |
+| IM Integrations | Feishu (Lark) WebSocket + Telegram HTTP long polling; planned: DingTalk, QQ | Done |
 | Web Flash & Serial | Browser-based firmware flash (esptool-js) and serial terminal with ANSI color rendering | Done |
-| Multi-Model API | Support mainstream LLM APIs: Claude, GPT, Gemini, DeepSeek, GLM, MiniMax, Grok, Moonshot, Baichuan, Qwen, Doubao, Llama (Ollama) | Planned |
+| Multi-Model API | Claude native API + OpenAI-compatible format (GPT, DeepSeek, GLM, MiniMax, Grok, Moonshot, Baichuan, Qwen, Doubao, Llama/Ollama); auto-detect by model name | Done |
 | Web Config Portal | Lightweight built-in web page for configuring API keys, selecting models, and tuning parameters at runtime | Planned |
 | Claw Skill Provider | Serve as a skill for other Claws, giving them the ability to sense and control the physical world | Planned |
 
